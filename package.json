@@ -1,12 +1,14 @@
 {
   "name": "matrix-puppet-bridge",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "facilitates writing a certain kind of matrix bridge",
   "main": "index.js",
   "scripts": {
     "test": "echo \"no tests at this time\"; exit 1"
   },
-  "keywords": ["matrix"],
+  "keywords": [
+    "matrix"
+  ],
   "contributors": [
     "Keyvan Fatehi",
     "Andrew Johnson"
@@ -51,7 +53,9 @@
       ],
       "no-unused-vars": [
         "error",
-        { "argsIgnorePattern": "^_" }
+        {
+          "argsIgnorePattern": "^_"
+        }
       ]
     }
   }

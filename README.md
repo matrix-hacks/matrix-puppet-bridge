@@ -13,13 +13,52 @@ These bridges have been built using matrix-puppet-bridge:
 
 ## FAQ
 
-Q: Why puppetting?
+### Q: Why puppetting?
 
-A: Please see [this commit](https://github.com/kfatehi/matrix-appservice-imessage/commit/8a832051f79a94d7330be9e252eea78f76d774bc)
+Please see [this commit](https://github.com/kfatehi/matrix-appservice-imessage/commit/8a832051f79a94d7330be9e252eea78f76d774bc)
 
-Q: How can I prevent long push notification messages for 1 on 1 conversations?
+### Q: How can I prevent long push notification messages for 1 on 1 conversations?
 
-A: At this time we recommend modifying sygnal. For example, see this commit: 
+At this time we recommend modifying sygnal. For example, see this commit: 
 https://github.com/AndrewJDR/sygnal/commit/3813ef48a1be1b6015953974a13ee4da2b704882
 
+The prefix seen by sygnal is that which you configure on your class:
 
+```javascript
+class App extends MatrixPuppetBridgeBase {
+  getServicePrefix() {
+    return "__mbp__someservice";
+  }
+}
+```
+
+In the examples above, "__mpb__" was used as the special tag, but it can be anything you want. Keep in mind that getServicePrefix is called for creating rooms and ghost users, and also needs to match your appserver yaml file, so plan for this and expect this to be a source of problems when changing it after having run the bridge for awhile under a different service prefix.
+
+### Q: How can I add bang (!) commands to a room, such as !echo
+
+`matrix-puppet-bridge` comes with a bang command processor. Simply define a method and it will be invoked instead of being forwarded to the third perty service:
+
+```javascript
+class App extends MatrixPuppetBridgeBase {
+	handleMatrixUserBangCommand(bangCmd, matrixMsgEvent) {
+		const { bangcommand, command, body } = bangCmd;
+		const { room_id } = matrixMsgEvent;
+		const client = this.puppet.getClient();
+		const reply = (str) => client.sendNotice(room_id, str);
+		if ( command === 'help' ) {
+			reply([
+				'Bang Commands',
+				'!help .......... display this information',
+				'!echo <text> ... repeat text back to you',
+				'!sync .......... synchronize this room with 3rd party service',
+			].join('\n'));
+		} else if ( command === 'echo' ) {
+			reply(body);
+		} else if ( command === 'sync' ) {
+			reply('command not implemented yet: '+bangcommand);
+		} else {
+			reply('unrecognized command: '+bangcommand);
+		}
+	}
+}
+```

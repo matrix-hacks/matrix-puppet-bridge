@@ -1,6 +1,7 @@
 const debug = require('./debug')('Base');
 const Promise = require('bluebird');
 const { Bridge, MatrixRoom, RemoteRoom } = require('matrix-appservice-bridge');
+const bangCommand = require('./bang-command');
 
 class Base {
   constructor(config, puppet) {
@@ -176,8 +177,9 @@ class Base {
     });
   }
   handleMatrixEvent(req, _context) {
-    const { warn } = debug(this.handleMatrixEvent.name);
+    const { info, warn } = debug(this.handleMatrixEvent.name);
     const data = req.getData();
+    info('type', data.type);
     if (data.type === 'm.room.message') {
       return this.handleMatrixMessageEvent(data);
     } else {
@@ -187,6 +189,7 @@ class Base {
   handleMatrixMessageEvent(data) {
     const { info, error } = debug(this.handleMatrixMessageEvent.name);
     const { room_id, content: { body, msgtype } } = data;
+    info('msgtype', msgtype);
     if (msgtype === 'm.motice') {
       info("ignoring message of type notice because the only messages of this type that");
       info("should show up in this room are those that were sent by the bridge itself in");
@@ -206,6 +209,18 @@ class Base {
         if ( !thirdPartyRoomId ) throw new Error('third party room id was not set. try implementing getThirdPartyRoomIdFromMatrixRoomId');
         // when an error happened, thirdPartyRoomId is now null
         info('got 3rd party room id', thirdPartyRoomId); // but we think we got it....
+        info('ready to send the message to sendMessageAsPuppetToThirdPartyRoomWithId');
+        info('we can process bang commands too check if derived class defined method handleMatrixUserBangCommand');
+        if (this.handleMatrixUserBangCommand) {
+          const bc = bangCommand(body);
+          if (bc) {
+            info('invoking handleMatrixUserBangCommand instead of sendMessageAsPuppetToThirdPartyRoomWithId');
+            info('with arguments');
+            info(bc);
+            info(data);
+            return this.handleMatrixUserBangCommand(bc, data);
+          }
+        }
         return this.sendMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, this.tagMatrixMessage(body));
       }).catch(err => {
         error('failed to send message to third party room using the third party client');
