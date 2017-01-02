@@ -140,12 +140,10 @@ class Base {
     const { info } = debug(this.handleThirdPartyRoomMessage.name);
     info('handling third party room message', thirdPartyRoomMessageData);
     const {
-      thirdParty: {
-        roomId,
-        //messageId,
-        senderName,
-        senderId
-      },
+      roomId,
+      //messageId,
+      senderName,
+      senderId,
       //attachmentUrl,
       text
     } = thirdPartyRoomMessageData;
