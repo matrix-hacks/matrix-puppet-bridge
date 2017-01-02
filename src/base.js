@@ -114,7 +114,7 @@ class Base {
             return prepareRoom(room_id);
           }, (_err) => {
             info("the room doesn't exist. we need to create it for the first time");
-            return puppetClient.createRoom().then(({room_id}) => {
+            return puppetClient.createRoom({}).then(({room_id}) => {
               return prepareRoom(room_id);
             });
           });
