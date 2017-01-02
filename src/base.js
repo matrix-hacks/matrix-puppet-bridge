@@ -166,30 +166,6 @@ class Base {
       } else {
         info("this message was not sent by me, send it the matrix room via ghost user as text");
 
-        // ANDYS CODE, remove when releasing lol
-        try {
-          let tmpGhostNick = "@imessage_"+roomId+":"+this.domain;
-          const tmpGhostIntent = this.bridge.getIntent(tmpGhostNick);
-          tmpGhostIntent.leave(entry.matrix.roomId).catch(()=>{
-            // dont care
-          });
-        } catch(err) {
-          // dont care
-        }
-        // XXX CLEANUP
-        //const botIntent = this.getIntentFromApplicationServerBot();
-        //const botClient = botIntent.getClient();
-
-        //const ghostIntent = this.getIntentFromThirdPartySenderId(thirdPartyRoomId);
-        //return Promise.mapSeries([
-        //  () => ghostIntent.leave(entry.matrix.roomId),
-        //], p => p()).finally(()=>{ throw new Error('aaa')})
-
-        //return botClient.leave(entry.matrix.roomId).
-        //finally(()=>{
-        //  throw new Error('STOP')
-        //});
-
         const ghostIntent = this.getIntentFromThirdPartySenderId(senderId);
         return Promise.mapSeries([
           () => ghostIntent.setDisplayName(senderName),
