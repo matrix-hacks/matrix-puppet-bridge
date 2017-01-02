@@ -67,10 +67,10 @@ class Base {
     throw new Error('override me');
   }
   getGhostUserFromThirdPartySenderId(id) {
-    return "@__mpb__"+this.getServicePrefix()+"_"+id+":"+this.domain;
+    return "@"+this.getServicePrefix()+"_"+id+":"+this.domain;
   }
   getRoomAliasFromThirdPartyRoomId(id) {
-    return "#__mpb__"+this.getServicePrefix()+"_"+id+':'+this.domain;
+    return "#"+this.getServicePrefix()+"_"+id+':'+this.domain;
   }
   getIntentFromThirdPartySenderId(senderId) {
     return this.bridge.getIntent(this.getGhostUserFromThirdPartySenderId(senderId));
@@ -222,15 +222,22 @@ class Base {
         return entries[0].remote.getId();
       }).catch(err => {
         error('there were no entries in the local room store matching that matrix room id');
-        error(err.message);
+        error('will ask the derived class for a 3rd party room id');
+        error('if it does not have one, it should throw an error');
+        return Promise.resolve(this.getThirdPartyRoomIdFromMatrixRoomId(room_id));
       }).then(thirdPartyRoomId => {
-        info('got 3rd party room id', thirdPartyRoomId);
+        if ( !thirdPartyRoomId ) throw new Error('third party room id was not set. try implementing getThirdPartyRoomIdFromMatrixRoomId');
+        // when an error happened, thirdPartyRoomId is now null
+        info('got 3rd party room id', thirdPartyRoomId); // but we think we got it....
         return this.sendMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, this.tagMatrixMessage(body));
       }).catch(err => {
         error('failed to send message to third party room using the third party client');
         error(err.stack);
       });
     }
+  }
+  getThirdPartyRoomIdFromMatrixRoomId(id) {
+    throw new Error('override me');
   }
   sendMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _messageText) {
     throw new Error('override me');
