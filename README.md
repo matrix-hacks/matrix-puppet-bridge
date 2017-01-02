@@ -1,42 +1,25 @@
-# matrix-appservice-groupme
+# matrix-puppet-bridge
 
-This is a Matrix bridge for GroupMe
+This project provides a base class for a style of Matrix bridge which primarily acts as or "puppets" a specific user (usually yourself) on your homeserver and on a third party service.
 
-## requirements
+There is a common pattern in this style of bridge, such as duplicate message issues, which are dealt with by this module.
 
-You will need to acquire your Access Token from GroupMe.
+## Examples
 
-* Get your access token by going to https://dev.groupme.com/ and clicking the "Access Token" link in the top right.
+These bridges have been built using matrix-puppet-bridge:
 
-## installation
-
-clone this repo
-
-cd into the directory
-
-run `npm install`
-
-## configure
-
-Copy `config.sample.json` to `config.json` and update it to match your setup
-
-## register the app service
-
-Generate an `groupme-registration.yaml` file with `node index.js -r -u "https://your.matrix.homeserver"`
-
-Note: The 'registration' setting in the config.json needs to set to the path of this file. By default, it already is.
-
-Copy this `groupme-registration.yaml` file to your home server, then edit it, setting its url to point to your bridge server. e.g. `url: 'http://your-bridge-server.example.org:8090'`
-
-Edit your homeserver.yaml file and update the `app_service_config_files` with the path to the `groupme-registration.yaml` file.
-
-Launch the bridge with ```node index.js```.
-
-Restart your HS.
+* https://github.com/kfatehi/matrix-appservice-imessage
+* https://github.com/kfatehi/matrix-appservice-groupme
 
 ## FAQ
 
-Q: How can I prevent long push notification messages?
+Q: Why puppetting?
 
-A: https://github.com/AndrewJDR/sygnal
+A: Please see [this commit](https://github.com/kfatehi/matrix-appservice-imessage/commit/8a832051f79a94d7330be9e252eea78f76d774bc)
+
+Q: How can I prevent long push notification messages for 1 on 1 conversations?
+
+A: At this time we recommend modifying sygnal. For example, see this commit: 
+https://github.com/AndrewJDR/sygnal/commit/3813ef48a1be1b6015953974a13ee4da2b704882
+
 

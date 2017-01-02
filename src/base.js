@@ -1,6 +1,6 @@
 const debug = require('./debug')('Base');
 const Promise = require('bluebird');
-const { Intent, Bridge, MatrixRoom, RemoteRoom } = require('matrix-appservice-bridge');
+const { Bridge, MatrixRoom, RemoteRoom } = require('matrix-appservice-bridge');
 
 class Base {
   constructor(config, puppet) {
@@ -106,7 +106,7 @@ class Base {
               info("now return the matrix room id so we can use it to update the cache");
               return room_id;
             });
-          }
+          };
 
           return puppetClient.getRoomIdForAlias(roomAlias).then(({room_id}) => {
             info("we got the room ID. so it exists on matrix.");
@@ -197,6 +197,7 @@ class Base {
       return roomStore.getEntriesByMatrixId(room_id).then(entries => {
         return entries[0].remote.getId();
       }).catch(err => {
+        error(err.message);
         error('there were no entries in the local room store matching that matrix room id');
         error('will ask the derived class for a 3rd party room id');
         error('if it does not have one, it should throw an error');
@@ -212,7 +213,7 @@ class Base {
       });
     }
   }
-  getThirdPartyRoomIdFromMatrixRoomId(id) {
+  getThirdPartyRoomIdFromMatrixRoomId(_id) {
     throw new Error('override me');
   }
   sendMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _messageText) {
