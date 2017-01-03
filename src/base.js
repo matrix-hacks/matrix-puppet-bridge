@@ -1,6 +1,6 @@
 const debug = require('./debug')('Base');
 const Promise = require('bluebird');
-const { Bridge, MatrixRoom, RemoteRoom } = require('matrix-appservice-bridge');
+const { Bridge, MatrixRoom, RemoteRoom, RemoteUser } = require('matrix-appservice-bridge');
 const bangCommand = require('./bang-command');
 
 class Base {
@@ -40,6 +40,9 @@ class Base {
   }
   initThirdPartyClient() {
     throw new Error("override me");
+  }
+  getThirdPartyUserDataById(_thirdPartyUserId) {
+    throw new Error("override me and return or resolve a promise with at least {senderName: 'some name'}, otherwise provide it in the original payload and i will never be invoked");
   }
   /**
    * Async call to get additional data about the third party room
@@ -134,9 +137,42 @@ class Base {
     });
   }
   /**
+   * Returns a Promise resolving {senderName}
+   *
+   * Optional code path which is only called if the derived class does not
+   * provide a senderName when invoking handleThirdPartyRoomMessage
+   *
+   * @param {string} thirdPartyUserId
+   * @returns {Promise=>object}
+   */
+  getOrInitRemoteUserStoreDataFromThirdPartyUserId(thirdPartyUserId) {
+    const { info } = debug(this.getOrInitRemoteUserStoreDataFromThirdPartyUserId.name);
+    const userStore = this.bridge.getUserStore();
+    return userStore.getRemoteUser(thirdPartyUserId).then(rUser=>{
+      if ( rUser ) {
+        info("found existing remote user in store", rUser);
+        return rUser;
+      } else {
+        info("did not find existing remote user in store, we must create it now");
+        return this.getThirdPartyUserDataById(thirdPartyUserId).then(thirdPartyUserData => {
+          info("got 3p user data:", thirdPartyUserData);
+          return new RemoteUser(thirdPartyUserId, {
+            senderName: thirdPartyUserData.senderName
+          });
+        }).then(rUser => {
+          return userStore.setRemoteUser(rUser);
+        }).then(()=>{
+          return userStore.getRemoteUser(thirdPartyUserId);
+        }).then(rUser => {
+          return rUser;
+        });
+      }
+    });
+  }
+  /**
    * Returns a promise
    */
-  handleThirdPartyRoomMessage(thirdPartyRoomMessageData) {
+  handleThirdPartyRoomMessage(thirdPartyRoomMessageData, doNotTryToGetRemoteUserStoreData) {
     const { info } = debug(this.handleThirdPartyRoomMessage.name);
     info('handling third party room message', thirdPartyRoomMessageData);
     const {
@@ -147,6 +183,22 @@ class Base {
       //attachmentUrl,
       text
     } = thirdPartyRoomMessageData;
+
+    if (!senderName) {
+      if ( doNotTryToGetRemoteUserStoreData ) throw new Error('preventing an endless loop');
+      info("no senderName provided with payload, will check store");
+      return this.getOrInitRemoteUserStoreDataFromThirdPartyUserId(senderId).then((remoteUser)=>{
+        info("got remote user from store, with a possible client API call in there somewhere", remoteUser);
+        const userData = { senderName: remoteUser.get('senderName') };
+        info("will retry now, once, after merging payload with remote user data", userData);
+        const newPayload = Object.assign({}, thirdPartyRoomMessageData, userData);
+        return this.handleThirdPartyRoomMessage(newPayload, true);
+      });
+    }
+
+    throw new Error('didnt wanna get here..');
+
+
     return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((entry)=> {
       if ( senderId === undefined ) {
         info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
