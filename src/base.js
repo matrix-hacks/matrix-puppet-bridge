@@ -99,6 +99,7 @@ class Base {
           const puppetClient = this.puppet.getClient();
 
           const prepareRoom = (room_id) => {
+            info('preparing room data', thirdPartyRoomData);
             return Promise.all([
               puppetClient.createAlias(roomAlias, room_id).catch((err)=>{
                 warn( err.message );
@@ -184,21 +185,6 @@ class Base {
       text
     } = thirdPartyRoomMessageData;
 
-    if (!senderName) {
-      if ( doNotTryToGetRemoteUserStoreData ) throw new Error('preventing an endless loop');
-      info("no senderName provided with payload, will check store");
-      return this.getOrInitRemoteUserStoreDataFromThirdPartyUserId(senderId).then((remoteUser)=>{
-        info("got remote user from store, with a possible client API call in there somewhere", remoteUser);
-        const userData = { senderName: remoteUser.get('senderName') };
-        info("will retry now, once, after merging payload with remote user data", userData);
-        const newPayload = Object.assign({}, thirdPartyRoomMessageData, userData);
-        return this.handleThirdPartyRoomMessage(newPayload, true);
-      });
-    }
-
-    throw new Error('didnt wanna get here..');
-
-
     return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((entry)=> {
       if ( senderId === undefined ) {
         info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
@@ -215,8 +201,20 @@ class Base {
           ], p => p());
         }
       } else {
-        info("this message was not sent by me, send it the matrix room via ghost user as text");
 
+        if (!senderName) {
+          if ( doNotTryToGetRemoteUserStoreData ) throw new Error('preventing an endless loop');
+          info("no senderName provided with payload, will check store");
+          return this.getOrInitRemoteUserStoreDataFromThirdPartyUserId(senderId).then((remoteUser)=>{
+            info("got remote user from store, with a possible client API call in there somewhere", remoteUser);
+            const userData = { senderName: remoteUser.get('senderName') };
+            info("will retry now, once, after merging payload with remote user data", userData);
+            const newPayload = Object.assign({}, thirdPartyRoomMessageData, userData);
+            return this.handleThirdPartyRoomMessage(newPayload, true);
+          });
+        }
+
+        info("this message was not sent by me, send it the matrix room via ghost user as text");
         const ghostIntent = this.getIntentFromThirdPartySenderId(senderId);
         return Promise.mapSeries([
           () => ghostIntent.setDisplayName(senderName),
