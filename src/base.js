@@ -167,8 +167,8 @@ class Base {
 
         const ghostIntent = this.getIntentFromThirdPartySenderId(senderId);
         return Promise.mapSeries([
-          () => ghostIntent.setDisplayName(senderName),
           () => ghostIntent.join(entry.matrix.roomId),
+          () => ghostIntent.setDisplayName(senderName),
           () => ghostIntent.sendText(entry.matrix.roomId, text),
         ], p => p());
       }
