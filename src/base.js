@@ -217,8 +217,8 @@ class Base {
         info("this message was not sent by me, send it the matrix room via ghost user as text");
         const ghostIntent = this.getIntentFromThirdPartySenderId(senderId);
         return Promise.mapSeries([
-          () => ghostIntent.setDisplayName(senderName),
           () => ghostIntent.join(entry.matrix.roomId),
+          () => ghostIntent.setDisplayName(senderName),
           () => ghostIntent.sendText(entry.matrix.roomId, text),
         ], p => p());
       }
