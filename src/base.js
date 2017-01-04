@@ -87,54 +87,65 @@ class Base {
     const roomStore = this.bridge.getRoomStore();
     const roomAlias = this.getRoomAliasFromThirdPartyRoomId(thirdPartyRoomId);
     info('looking up', thirdPartyRoomId);
-    return roomStore.getEntryById(roomAlias).then(entry=>{
-      info("get or otherwise create the matrix room");
-      if ( entry ) {
-        return entry;
-      } else {
-        info("it is not in our entry, so lets get the third party info for now so we have it");
-        return this.getThirdPartyRoomDataById(thirdPartyRoomId).then(thirdPartyRoomData => {
-          info("our local cache may be empty, so we should find out if this room");
-          info("is already on matrix and get that first using the room alias");
-          const puppetClient = this.puppet.getClient();
+    const puppetClient = this.puppet.getClient();
 
-          const prepareRoom = (room_id) => {
-            info('preparing room data', thirdPartyRoomData);
-            return Promise.all([
-              puppetClient.createAlias(roomAlias, room_id).catch((err)=>{
-                warn( err.message );
-              }),
-              puppetClient.setRoomName(room_id, thirdPartyRoomData.name),
-              puppetClient.setRoomTopic(room_id, thirdPartyRoomData.topic),
-              puppetClient.joinRoom(room_id)
-            ]).then(()=>{
-              info("now return the matrix room id so we can use it to update the cache");
-              return room_id;
-            });
-          };
-
-          return puppetClient.getRoomIdForAlias(roomAlias).then(({room_id}) => {
-            info("we got the room ID. so it exists on matrix.");
-            info("we just need to update our local cache, return the matrix room id for now");
-            return prepareRoom(room_id);
-          }, (_err) => {
-            info("the room doesn't exist. we need to create it for the first time");
-            return puppetClient.createRoom({}).then(({room_id}) => {
-              return prepareRoom(room_id);
-            });
-          });
-        }).then(matrixRoomId => {
-          info("now's the time to update our local cache for this linked room");
-          return roomStore.upsertEntry({
-            id: roomAlias,
-            remote: new RemoteRoom(thirdPartyRoomId),
-            matrix: new MatrixRoom(matrixRoomId)
-          }).then(()=> {
-            info("finally return the entry we were looking for in the first place");
-            return roomStore.getEntryById(roomAlias);
-          });
+    const prepareRoom = (roomAlias, name, topic) => {
+      return puppetClient.getRoomIdForAlias(roomAlias).then(({room_id}) => {
+        info("we got the room ID. so it exists on matrix.");
+        info("we just need to update our local cache, return the matrix room id for now");
+        return [room_id, name, topic];
+      }, (_err) => {
+        info("the room doesn't exist. we need to create it for the first time");
+        return puppetClient.createRoom({}).then(({room_id}) => {
+          return [room_id, name, topic];
         });
+      }).then((matrixId, remoteName, remoteTopic)=>{
+        return Promise.mapSeries([
+          ()=>puppetClient.createAlias(roomAlias, matrixId).catch(err=>warn(err.message)),
+          ()=>puppetClient.setRoomName(matrixId, remoteName),
+          ()=>puppetClient.setRoomTopic(matrixId, remoteTopic),
+          ()=>puppetClient.joinRoom(matrixId)
+        ], p=>p()).then(()=>{
+          info("now return the matrix room id so we can use it to update the cache");
+          return [matrixId, remoteName, remoteTopic];
+        });
+      });
+    }
+
+    info("querying the local entry for the matrix room by alias", roomAlias);
+    return roomStore.getEntryById(roomAlias).then(entry=>{
+      if ( entry ) {
+        const thirdPartyRoomData = entry.remote.data;
+        if ( thirdPartyRoomData ) {
+          const { name, topic } = thirdPartyRoomData;
+          return getRoomStuff(roomAlias, name, topic)
+        } else {
+          throw new Error('entry has no 3rd party data in it');
+        }
+      } else {
+        throw new Error('entry not found');
       }
+    }).catch((err)=>{
+      warn(err.message);
+      info("the local entry is no bueno, so lets get third party data and update it");
+      return this.getThirdPartyRoomDataById(thirdPartyRoomId).then(thirdPartyRoomData => {
+        const { name, topic } = thirdPartyRoomData;
+        info("our local cache may be empty, so we should find out if this room");
+        info("is already on matrix and get that first using the room alias");
+        return prepareRoom();
+      }).then(([matrixRoomId, name, topic]) => {
+        info("now's the time to update our local cache for this linked room");
+        return roomStore.upsertEntry({
+          id: roomAlias,
+          remote: new RemoteRoom(thirdPartyRoomId, {
+            name, topic
+          }),
+          matrix: new MatrixRoom(matrixRoomId)
+        });
+      });
+    }).then(()=> {
+      info("finally return the entry we were looking for in the first place");
+      return roomStore.getEntryById(roomAlias);
     });
   }
   /**
@@ -174,7 +185,7 @@ class Base {
    * Returns a promise
    */
   handleThirdPartyRoomMessage(thirdPartyRoomMessageData, doNotTryToGetRemoteUserStoreData) {
-    const { info } = debug(this.handleThirdPartyRoomMessage.name);
+    const { info, warn } = debug(this.handleThirdPartyRoomMessage.name);
     info('handling third party room message', thirdPartyRoomMessageData);
     const {
       roomId,
@@ -248,7 +259,7 @@ class Base {
       return roomStore.getEntriesByMatrixId(room_id).then(entries => {
         return entries[0].remote.getId();
       }).catch(err => {
-        error(err.message);
+        error(err.stack);
         error('there were no entries in the local room store matching that matrix room id');
         error('will ask the derived class for a 3rd party room id');
         error('if it does not have one, it should throw an error');
