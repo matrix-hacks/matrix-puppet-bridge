@@ -67,3 +67,9 @@ class App extends MatrixPuppetBridgeBase {
 	}
 }
 ```
+
+### Q: My access token has changed. How can I update my access token on the bridge?
+
+Run this in your bridge directory:
+
+`node -e "new (require('matrix-puppet-bridge').Puppet)('config.json').associate()"`
