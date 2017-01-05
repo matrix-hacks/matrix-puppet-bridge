@@ -76,6 +76,20 @@ class Base {
   getRoomAliasFromThirdPartyRoomId(id) {
     return "#"+this.getRoomAliasLocalPartFromThirdPartyRoomId(id)+':'+this.domain;
   }
+  getThirdPartyRoomIdFromMatrixRoomId(matrixRoomId) {
+    const { info } = debug(this.getThirdPartyRoomIdFromMatrixRoomId.name);
+    const patt = new RegExp(`^#${this.getServicePrefix()}_(.+)$`);
+    const room = this.puppet.getClient().getRoom(matrixRoomId);
+    info('reducing array of alases to a 3prid');
+    return room.getAliases().reduce((result, alias) => {
+      info('alias', alias);
+      const localpart = alias.replace(':'+this.domain, '');
+      info('localpart', localpart);
+      const matches = localpart.match(patt);
+      info('matches', matches);
+      return matches ? matches[1] : result;
+    }, null);
+  }
   getRoomAliasLocalPartFromThirdPartyRoomId(id) {
     return this.getServicePrefix()+"_"+id;
   }
@@ -84,44 +98,6 @@ class Base {
   }
   getIntentFromApplicationServerBot() {
     return this.bridge.getIntent();
-  }
-  getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId) {
-    const { info } = debug(this.getOrCreateMatrixRoomFromThirdPartyRoomId.name);
-    const roomAlias = this.getRoomAliasFromThirdPartyRoomId(thirdPartyRoomId);
-    const roomAliasName = this.getRoomAliasLocalPartFromThirdPartyRoomId(thirdPartyRoomId);
-    info('looking up', thirdPartyRoomId);
-    const puppetClient = this.puppet.getClient();
-
-
-    return puppetClient.getRoomIdForAlias(roomAlias).then(({room_id}) => {
-      info("we got the room ID. so it exists on matrix.");
-      info("we just need to update our local cache, return the matrix room id for now");
-      return room_id;
-    }, (_err) => {
-      info("the room doesn't exist. we need to create it for the first time");
-      return this.getThirdPartyRoomDataById(thirdPartyRoomId).then(thirdPartyRoomData => {
-        info("got 3p room data", thirdPartyRoomData);
-        const { name, topic } = thirdPartyRoomData;
-        info("creating room !!!!", ">>>>"+roomAliasName+"<<<<", name, topic);
-        return puppetClient.createRoom({
-          name, topic
-        }).then(({room_id}) => {
-          info("room created", room_id);
-          info("setting room alias", room_id, roomAlias);
-          return puppetClient.createAlias(roomAlias, room_id).then(()=>{
-            info("romo alias set");
-            return room_id;
-          });
-        });
-      });
-    }).then(matrixRoomId => {
-      info("making puppet join room");
-      return puppetClient.joinRoom(matrixRoomId).finally(() => {
-        info("returning room id after join room attempt");
-        return matrixRoomId;
-      });
-    });
-      
   }
   /**
    * Returns a Promise resolving {senderName}
@@ -156,6 +132,48 @@ class Base {
       }
     });
   }
+  getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId) {
+    const { warn, info } = debug(this.getOrCreateMatrixRoomFromThirdPartyRoomId.name);
+    const roomAlias = this.getRoomAliasFromThirdPartyRoomId(thirdPartyRoomId);
+    const roomAliasName = this.getRoomAliasLocalPartFromThirdPartyRoomId(thirdPartyRoomId);
+    info('looking up', thirdPartyRoomId);
+    const puppetClient = this.puppet.getClient();
+
+
+    return puppetClient.getRoomIdForAlias(roomAlias).then(({room_id}) => {
+      info("found matrix room via alias. room_id:", room_id);
+      return room_id;
+    }, (_err) => {
+      info("the room doesn't exist. we need to create it for the first time");
+      return this.getThirdPartyRoomDataById(thirdPartyRoomId).then(thirdPartyRoomData => {
+        info("got 3p room data", thirdPartyRoomData);
+        const { name, topic } = thirdPartyRoomData;
+        info("creating room !!!!", ">>>>"+roomAliasName+"<<<<", name, topic);
+        return puppetClient.createRoom({
+          name, topic
+        }).then(({room_id}) => {
+          info("room created", room_id);
+          info("setting room alias", room_id, roomAlias);
+          return puppetClient.createAlias(roomAlias, room_id).then(()=>{
+            info("romo alias set");
+            return room_id;
+          });
+        });
+      });
+    }).then(matrixRoomId => {
+      const afterJoinRoomAttempt = (err) => {
+        if (err)
+          warn("ignoring error from puppet join room: ", err.message);
+        info("returning room id after join room attempt", matrixRoomId);
+        return matrixRoomId;
+      };
+      info("making puppet join room");
+      return puppetClient.joinRoom(matrixRoomId)
+        .then(afterJoinRoomAttempt)
+        .catch(afterJoinRoomAttempt);
+    });
+      
+  }
   /**
    * Returns a promise
    */
@@ -170,6 +188,7 @@ class Base {
     } = thirdPartyRoomMessageData;
 
     return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((roomId)=> {
+      info("got or created matrix room with id", roomId);
       if ( senderId === undefined ) {
         info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
         info("if it came from a 3rd party client, we want to repeat it as a 'notice' message type");
@@ -210,57 +229,28 @@ class Base {
   handleMatrixEvent(req, _context) {
     const { info, warn } = debug(this.handleMatrixEvent.name);
     const data = req.getData();
-    info('type', data.type);
     if (data.type === 'm.room.message') {
+      info('incoming message. data:', data);
       return this.handleMatrixMessageEvent(data);
     } else {
       return warn('ignored a matrix event', data.type);
     }
   }
   handleMatrixMessageEvent(data) {
-    const { info, error } = debug(this.handleMatrixMessageEvent.name);
+    const { info } = debug(this.handleMatrixMessageEvent.name);
     const { room_id, content: { body, msgtype } } = data;
-    info('msgtype', msgtype);
     if (msgtype === 'm.motice') {
       info("ignoring message of type notice because the only messages of this type that");
-      info("should show up in this room are those that were sent by the bridge itself in");
-      info("response to the user being puppetted having communicated via the 3rd party client");
+      info("should show up in this room are those that were sent by the bridge itself");
     } else if (msgtype === 'm.text') {
-      const roomStore = this.bridge.getRoomStore();
-      info('looking up third party room id using the matrix room id', room_id);
-      return roomStore.getEntriesByMatrixId(room_id).then(entries => {
-        return entries[0].remote.getId();
-      }).catch(err => {
-        error(err.stack);
-        error('there were no entries in the local room store matching that matrix room id');
-        error('will ask the derived class for a 3rd party room id');
-        error('if it does not have one, it should throw an error');
-        return Promise.resolve(this.getThirdPartyRoomIdFromMatrixRoomId(room_id));
-      }).then(thirdPartyRoomId => {
-        if ( !thirdPartyRoomId ) throw new Error('third party room id was not set. try implementing getThirdPartyRoomIdFromMatrixRoomId');
-        // when an error happened, thirdPartyRoomId is now null
-        info('got 3rd party room id', thirdPartyRoomId); // but we think we got it....
-        info('ready to send the message to sendMessageAsPuppetToThirdPartyRoomWithId');
-        info('we can process bang commands too check if derived class defined method handleMatrixUserBangCommand');
-        if (this.handleMatrixUserBangCommand) {
-          const bc = bangCommand(body);
-          if (bc) {
-            info('invoking handleMatrixUserBangCommand instead of sendMessageAsPuppetToThirdPartyRoomWithId');
-            info('with arguments');
-            info(bc);
-            info(data);
-            return this.handleMatrixUserBangCommand(bc, data);
-          }
-        }
-        return this.sendMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, this.tagMatrixMessage(body));
-      }).catch(err => {
-        error('failed to send message to third party room using the third party client');
-        error(err.stack);
-      });
+      if (this.handleMatrixUserBangCommand) {
+        const bc = bangCommand(body);
+        if (bc) return this.handleMatrixUserBangCommand(bc, data);
+      }
+      const thirdPartyRoomId = this.getThirdPartyRoomIdFromMatrixRoomId(room_id);
+      const msg = this.tagMatrixMessage(body);
+      return this.sendMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg);
     }
-  }
-  getThirdPartyRoomIdFromMatrixRoomId(_id) {
-    throw new Error('override me');
   }
   sendMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _messageText) {
     throw new Error('override me');
