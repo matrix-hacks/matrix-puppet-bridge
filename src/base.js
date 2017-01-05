@@ -74,7 +74,10 @@ class Base {
     return "@"+this.getServicePrefix()+"_"+id+":"+this.domain;
   }
   getRoomAliasFromThirdPartyRoomId(id) {
-    return "#"+this.getServicePrefix()+"_"+id+':'+this.domain;
+    return "#"+this.getRoomAliasLocalPartFromThirdPartyRoomId(id)+':'+this.domain;
+  }
+  getRoomAliasLocalPartFromThirdPartyRoomId(id) {
+    return this.getServicePrefix()+"_"+id;
   }
   getIntentFromThirdPartySenderId(senderId) {
     return this.bridge.getIntent(this.getGhostUserFromThirdPartySenderId(senderId));
@@ -83,70 +86,42 @@ class Base {
     return this.bridge.getIntent();
   }
   getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId) {
-    const { info, warn } = debug(this.getOrCreateMatrixRoomFromThirdPartyRoomId.name);
-    const roomStore = this.bridge.getRoomStore();
+    const { info } = debug(this.getOrCreateMatrixRoomFromThirdPartyRoomId.name);
     const roomAlias = this.getRoomAliasFromThirdPartyRoomId(thirdPartyRoomId);
+    const roomAliasName = this.getRoomAliasLocalPartFromThirdPartyRoomId(thirdPartyRoomId);
     info('looking up', thirdPartyRoomId);
     const puppetClient = this.puppet.getClient();
 
-    const prepareRoom = (roomAlias, name, topic) => {
-      return puppetClient.getRoomIdForAlias(roomAlias).then(({room_id}) => {
-        info("we got the room ID. so it exists on matrix.");
-        info("we just need to update our local cache, return the matrix room id for now");
-        return [room_id, name, topic];
-      }, (_err) => {
-        info("the room doesn't exist. we need to create it for the first time");
-        return puppetClient.createRoom({}).then(({room_id}) => {
-          return [room_id, name, topic];
-        });
-      }).then((matrixId, remoteName, remoteTopic)=>{
-        return Promise.mapSeries([
-          ()=>puppetClient.createAlias(roomAlias, matrixId).catch(err=>warn(err.message)),
-          ()=>puppetClient.setRoomName(matrixId, remoteName),
-          ()=>puppetClient.setRoomTopic(matrixId, remoteTopic),
-          ()=>puppetClient.joinRoom(matrixId)
-        ], p=>p()).then(()=>{
-          info("now return the matrix room id so we can use it to update the cache");
-          return [matrixId, remoteName, remoteTopic];
-        });
-      });
-    }
 
-    info("querying the local entry for the matrix room by alias", roomAlias);
-    return roomStore.getEntryById(roomAlias).then(entry=>{
-      if ( entry ) {
-        const thirdPartyRoomData = entry.remote.data;
-        if ( thirdPartyRoomData ) {
-          const { name, topic } = thirdPartyRoomData;
-          return getRoomStuff(roomAlias, name, topic)
-        } else {
-          throw new Error('entry has no 3rd party data in it');
-        }
-      } else {
-        throw new Error('entry not found');
-      }
-    }).catch((err)=>{
-      warn(err.message);
-      info("the local entry is no bueno, so lets get third party data and update it");
+    return puppetClient.getRoomIdForAlias(roomAlias).then(({room_id}) => {
+      info("we got the room ID. so it exists on matrix.");
+      info("we just need to update our local cache, return the matrix room id for now");
+      return room_id;
+    }, (_err) => {
+      info("the room doesn't exist. we need to create it for the first time");
       return this.getThirdPartyRoomDataById(thirdPartyRoomId).then(thirdPartyRoomData => {
+        info("got 3p room data", thirdPartyRoomData);
         const { name, topic } = thirdPartyRoomData;
-        info("our local cache may be empty, so we should find out if this room");
-        info("is already on matrix and get that first using the room alias");
-        return prepareRoom();
-      }).then(([matrixRoomId, name, topic]) => {
-        info("now's the time to update our local cache for this linked room");
-        return roomStore.upsertEntry({
-          id: roomAlias,
-          remote: new RemoteRoom(thirdPartyRoomId, {
-            name, topic
-          }),
-          matrix: new MatrixRoom(matrixRoomId)
+        info("creating room !!!!", ">>>>"+roomAliasName+"<<<<", name, topic);
+        return puppetClient.createRoom({
+          name, topic
+        }).then(({room_id}) => {
+          info("room created", room_id);
+          info("setting room alias", room_id, roomAlias);
+          return puppetClient.createAlias(roomAlias, room_id).then(()=>{
+            info("romo alias set");
+            return room_id;
+          });
         });
       });
-    }).then(()=> {
-      info("finally return the entry we were looking for in the first place");
-      return roomStore.getEntryById(roomAlias);
+    }).then(matrixRoomId => {
+      info("making puppet join room");
+      return puppetClient.joinRoom(matrixRoomId).finally(() => {
+        info("returning room id after join room attempt");
+        return matrixRoomId;
+      });
     });
+      
   }
   /**
    * Returns a Promise resolving {senderName}
@@ -185,18 +160,16 @@ class Base {
    * Returns a promise
    */
   handleThirdPartyRoomMessage(thirdPartyRoomMessageData, doNotTryToGetRemoteUserStoreData) {
-    const { info, warn } = debug(this.handleThirdPartyRoomMessage.name);
+    const { info } = debug(this.handleThirdPartyRoomMessage.name);
     info('handling third party room message', thirdPartyRoomMessageData);
     const {
       roomId,
-      //messageId,
       senderName,
       senderId,
-      //attachmentUrl,
       text
     } = thirdPartyRoomMessageData;
 
-    return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((entry)=> {
+    return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((roomId)=> {
       if ( senderId === undefined ) {
         info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
         info("if it came from a 3rd party client, we want to repeat it as a 'notice' message type");
@@ -207,8 +180,7 @@ class Base {
         } else {
           info('it is from 3rd party client, so repeat it as a notice');
           return Promise.mapSeries([
-            () => this.puppet.getClient().joinRoom(entry.matrix.roomId),
-            () => this.puppet.getClient().sendNotice(entry.matrix.roomId, text)
+            () => this.puppet.getClient().sendNotice(roomId, text)
           ], p => p());
         }
       } else {
@@ -228,9 +200,9 @@ class Base {
         info("this message was not sent by me, send it the matrix room via ghost user as text");
         const ghostIntent = this.getIntentFromThirdPartySenderId(senderId);
         return Promise.mapSeries([
-          () => ghostIntent.join(entry.matrix.roomId),
+          () => ghostIntent.join(roomId),
           () => ghostIntent.setDisplayName(senderName),
-          () => ghostIntent.sendText(entry.matrix.roomId, text),
+          () => ghostIntent.sendText(roomId, text),
         ], p => p());
       }
     });
