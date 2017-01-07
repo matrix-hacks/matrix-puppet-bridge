@@ -1,9 +1,46 @@
 const debug = require('./debug')('Base');
 const Promise = require('bluebird');
-const { Bridge, MatrixRoom, RemoteRoom, RemoteUser } = require('matrix-appservice-bridge');
+const { Bridge, RemoteUser } = require('matrix-appservice-bridge');
 const bangCommand = require('./bang-command');
 
 class Base {
+  initThirdPartyClient() {
+    throw new Error("override me");
+  }
+  getThirdPartyUserDataById(_thirdPartyUserId) {
+    throw new Error("override me and return or resolve a promise with at least {senderName: 'some name'}, otherwise provide it in the original payload and i will never be invoked");
+  }
+  /**
+   * Async call to get additional data about the third party room
+   *
+   * @param {string} thirdPartyRoomId The unique identifier on the third party's side
+   * @returns {Promise->object} Promise resolving object { name:string, topic:string }
+   */
+  getThirdPartyRoomDataById(_thirdPartyRoomId) {
+    throw new Error("override me");
+  }
+  /**
+   * The short string to put before the ghost user name.
+   * e.g. return "groupme" for @groupme_bob:your.host.com
+   *
+   * @returns {string} The string to prefix localpart user ids of ghost users
+   */
+  getServicePrefix() {
+    throw new Error("override me");
+  }
+  /**
+   * Return a user id to match against 3rd party user id's in order to know if the message is of self-origin
+   *
+   * @returns {string} Your user ID from the perspective of the third party
+   */
+  getPuppetThirdPartyUserId() {
+    throw new Error('override me');
+  }
+  sendMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _messageText) {
+    throw new Error('override me');
+  }
+
+
   constructor(config, puppet) {
     const { info } = debug();
     this.config = config;
@@ -37,38 +74,6 @@ class Base {
       }
     }));
     info('initialized');
-  }
-  initThirdPartyClient() {
-    throw new Error("override me");
-  }
-  getThirdPartyUserDataById(_thirdPartyUserId) {
-    throw new Error("override me and return or resolve a promise with at least {senderName: 'some name'}, otherwise provide it in the original payload and i will never be invoked");
-  }
-  /**
-   * Async call to get additional data about the third party room
-   *
-   * @param {string} thirdPartyRoomId The unique identifier on the third party's side
-   * @returns {Promise->object} Promise resolving object { name:string, topic:string }
-   */
-  getThirdPartyRoomDataById(_thirdPartyRoomId) {
-    throw new Error("override me");
-  }
-  /**
-   * The short string to put before the ghost user name.
-   * e.g. return "groupme" for @groupme_bob:your.host.com
-   *
-   * @returns {string} The string to prefix localpart user ids of ghost users
-   */
-  getServicePrefix() {
-    throw new Error("override me");
-  }
-  /**
-   * Return a user id to match against 3rd party user id's in order to know if the message is of self-origin
-   *
-   * @returns {string} Your user ID from the perspective of the third party
-   */
-  getPuppetThirdPartyUserId() {
-    throw new Error('override me');
   }
   getGhostUserFromThirdPartySenderId(id) {
     return "@"+this.getServicePrefix()+"_"+id+":"+this.domain;
@@ -145,7 +150,7 @@ class Base {
       return room_id;
     }, (_err) => {
       info("the room doesn't exist. we need to create it for the first time");
-      return this.getThirdPartyRoomDataById(thirdPartyRoomId).then(thirdPartyRoomData => {
+      return Promise.resolve(this.getThirdPartyRoomDataById(thirdPartyRoomId)).then(thirdPartyRoomData => {
         info("got 3p room data", thirdPartyRoomData);
         const { name, topic } = thirdPartyRoomData;
         info("creating room !!!!", ">>>>"+roomAliasName+"<<<<", name, topic);
@@ -251,9 +256,6 @@ class Base {
       const msg = this.tagMatrixMessage(body);
       return this.sendMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg);
     }
-  }
-  sendMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _messageText) {
-    throw new Error('override me');
   }
   defaultDeduplicationTag() {
     return " [m]";
