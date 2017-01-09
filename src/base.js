@@ -159,14 +159,10 @@ class Base {
         const { name, topic } = thirdPartyRoomData;
         info("creating room !!!!", ">>>>"+roomAliasName+"<<<<", name, topic);
         return puppetClient.createRoom({
-          name, topic
+          name, topic, room_alias_name: roomAliasName
         }).then(({room_id}) => {
-          info("room created", room_id);
-          info("setting room alias", room_id, roomAlias);
-          return puppetClient.createAlias(roomAlias, room_id).then(()=>{
-            info("romo alias set");
-            return room_id;
-          });
+          info("room created", room_id, roomAliasName);
+          return room_id;
         });
       });
     }).then(matrixRoomId => {
