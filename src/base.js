@@ -81,17 +81,20 @@ class Base {
   getRoomAliasFromThirdPartyRoomId(id) {
     return "#"+this.getRoomAliasLocalPartFromThirdPartyRoomId(id)+':'+this.domain;
   }
+  getThirdPartyUserIdFromMatrixGhostId(matrixGhostId) {
+    const patt = new RegExp(`^@${this.getServicePrefix()}_(.+)$`);
+    const localpart = matrixGhostId.replace(':'+this.domain, '');
+    const matches = localpart.match(patt);
+    return matches ? matches[1] : null;
+  }
   getThirdPartyRoomIdFromMatrixRoomId(matrixRoomId) {
     const { info } = debug(this.getThirdPartyRoomIdFromMatrixRoomId.name);
     const patt = new RegExp(`^#${this.getServicePrefix()}_(.+)$`);
     const room = this.puppet.getClient().getRoom(matrixRoomId);
     info('reducing array of alases to a 3prid');
     return room.getAliases().reduce((result, alias) => {
-      info('alias', alias);
       const localpart = alias.replace(':'+this.domain, '');
-      info('localpart', localpart);
       const matches = localpart.match(patt);
-      info('matches', matches);
       return matches ? matches[1] : result;
     }, null);
   }
@@ -254,7 +257,7 @@ class Base {
       }
       const thirdPartyRoomId = this.getThirdPartyRoomIdFromMatrixRoomId(room_id);
       const msg = this.tagMatrixMessage(body);
-      return this.sendMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg);
+      return this.sendMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, data);
     }
   }
   defaultDeduplicationTag() {
