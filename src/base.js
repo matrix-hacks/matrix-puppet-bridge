@@ -43,6 +43,7 @@ class Base {
 
   constructor(config, puppet) {
     const { info } = debug();
+    this.allowNullSenderName = false;
     this.config = config;
     this.puppet = puppet;
     this.domain = config.bridge.domain;
@@ -212,7 +213,7 @@ class Base {
         }
       } else {
 
-        if (!senderName) {
+        if (!senderName && !this.allowNullSenderName) {
           if ( doNotTryToGetRemoteUserStoreData ) throw new Error('preventing an endless loop');
           info("no senderName provided with payload, will check store");
           return this.getOrInitRemoteUserStoreDataFromThirdPartyUserId(senderId).then((remoteUser)=>{
@@ -226,11 +227,12 @@ class Base {
 
         info("this message was not sent by me, send it the matrix room via ghost user as text");
         const ghostIntent = this.getIntentFromThirdPartySenderId(senderId);
-        return Promise.mapSeries([
-          () => ghostIntent.join(roomId),
-          () => ghostIntent.setDisplayName(senderName),
-          () => ghostIntent.sendText(roomId, text),
-        ], p => p());
+        let promiseList = [];
+        promiseList.push(() => ghostIntent.join(roomId));
+        if (senderName)
+          promiseList.push(() => ghostIntent.setDisplayName(senderName));
+        promiseList.push(() => ghostIntent.sendText(roomId, text));
+        return Promise.mapSeries(promiseList, p => p());
       }
     });
   }
