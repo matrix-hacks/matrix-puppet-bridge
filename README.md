@@ -11,6 +11,7 @@ These bridges have been built using matrix-puppet-bridge:
 * https://github.com/kfatehi/matrix-appservice-imessage
 * https://github.com/kfatehi/matrix-appservice-groupme
 * https://github.com/kfatehi/matrix-appservice-facebook
+* https://github.com/kfatehi/matrix-appservice-slack
 
 ## FAQ
 
