@@ -169,18 +169,23 @@ class Base {
         });
       });
     }).then(matrixRoomId => {
-      const afterJoinRoomAttempt = (err) => {
-        if (err)
-          warn("ignoring error from puppet join room: ", err.message);
+      info("making puppet join room", matrixRoomId);
+      return puppetClient.joinRoom(matrixRoomId).then(()=>{
         info("returning room id after join room attempt", matrixRoomId);
-        return matrixRoomId;
-      };
-      info("making puppet join room");
-      return puppetClient.joinRoom(matrixRoomId)
-        .then(afterJoinRoomAttempt)
-        .catch(afterJoinRoomAttempt);
+        return matrixRoomId
+      }, (err) => {
+        if ( err.message === 'No known servers' ) {
+          warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
+          return puppetClient.deleteAlias(roomAlias).then(()=>{
+            warn('deleted alias... trying again to get or create room.');
+            return this.getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId)
+          })
+        } else {
+          warn("ignoring error from puppet join room: ", err.message);
+          return matrixRoomId;
+        }
+      });
     });
-      
   }
   /**
    * Returns a promise
