@@ -8,10 +8,10 @@ There is a common pattern in this style of bridge, such as duplicate message iss
 
 These bridges have been built using matrix-puppet-bridge:
 
-* https://github.com/kfatehi/matrix-appservice-imessage
-* https://github.com/kfatehi/matrix-appservice-groupme
-* https://github.com/kfatehi/matrix-appservice-facebook
-* https://github.com/kfatehi/matrix-appservice-slack
+* https://github.com/kfatehi/matrix-puppet-imessage
+* https://github.com/kfatehi/matrix-puppet-groupme
+* https://github.com/kfatehi/matrix-puppet-facebook
+* https://github.com/kfatehi/matrix-puppet-slack
 
 ## FAQ
 
