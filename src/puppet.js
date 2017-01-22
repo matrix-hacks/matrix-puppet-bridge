@@ -28,7 +28,15 @@ class Puppet {
       });
     }).then(_matrixClient => {
       this.client = _matrixClient;
-      return this.client.startClient();
+      this.client.startClient();
+      return new Promise((resolve, reject) => {
+        this.client.on('sync', (state) => {
+          if ( state === 'PREPARED' ) {
+            console.log('synced');
+            resolve();
+          }
+        });
+      });
     });
   }
   getClient() {
