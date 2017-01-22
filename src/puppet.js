@@ -28,7 +28,7 @@ class Puppet {
       });
     }).then(_matrixClient => {
       this.client = _matrixClient;
-      this.client.startClient();
+      return this.client.startClient();
     });
   }
   getClient() {
