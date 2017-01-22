@@ -40,8 +40,7 @@ class Base {
     throw new Error('override me');
   }
 
-
-  constructor(config, puppet) {
+  constructor(config, puppet, bridge) {
     const { info } = debug();
     this.allowNullSenderName = false;
     this.config = config;
@@ -50,7 +49,12 @@ class Base {
     this.deduplicationTag = this.config.deduplicationTag || this.defaultDeduplicationTag();
     this.deduplicationTagPattern = this.config.deduplicationTagPattern || this.defaultDeduplicationTagPattern();
     this.deduplicationTagRegex = new RegExp(this.deduplicationTagPattern);
-    this.bridge = new Bridge(Object.assign({}, config.bridge, {
+    this.bridge = bridge || this.setupBridge(config);
+    info('initialized');
+  }
+
+  setupBridge(config) {
+    return new Bridge(Object.assign({}, config.bridge, {
       controller: {
         onUserQuery: function(queriedUser) {
           console.log('got user query', queriedUser);
@@ -74,7 +78,6 @@ class Base {
         }
       }
     }));
-    info('initialized');
   }
   getGhostUserFromThirdPartySenderId(id) {
     return "@"+this.getServicePrefix()+"_"+id+":"+this.domain;
