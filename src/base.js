@@ -197,7 +197,8 @@ class Base {
       roomId,
       senderName,
       senderId,
-      text
+      text,
+      html
     } = thirdPartyRoomMessageData;
 
     return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((roomId)=> {
@@ -233,9 +234,22 @@ class Base {
         const ghostIntent = this.getIntentFromThirdPartySenderId(senderId);
         let promiseList = [];
         promiseList.push(() => ghostIntent.join(roomId));
+
         if (senderName)
           promiseList.push(() => ghostIntent.setDisplayName(senderName));
-        promiseList.push(() => ghostIntent.sendText(roomId, text));
+
+        promiseList.push(() => {
+          if (html) {
+            return ghostIntent.sendMessage(roomId, {
+              body: text,
+              formatted_body: html,
+              format: "org.matrix.custom.html",
+              msgtype: "m.text"
+            });
+          } else {
+            return ghostIntent.sendText(roomId, text);
+          }
+        });
         return Promise.mapSeries(promiseList, p => p());
       }
     });
@@ -262,6 +276,9 @@ class Base {
         if (bc) return this.handleMatrixUserBangCommand(bc, data);
       }
       const thirdPartyRoomId = this.getThirdPartyRoomIdFromMatrixRoomId(room_id);
+      if (!thirdPartyRoomId) {
+        throw new Error('could not determine third party room id. aborting send message!');
+      }
       const msg = this.tagMatrixMessage(body);
       return this.sendMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, data);
     }
