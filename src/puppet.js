@@ -30,6 +30,10 @@ class Puppet {
       this.client = _matrixClient;
       this.client.startClient();
       return new Promise((resolve, reject) => {
+        this.matrixRoomMembers = {};
+        this.client.on("RoomState.members", (event, state, _member) => {
+          this.matrixRoomMembers[state.roomId] = Object.keys(state.members);
+        });
         this.client.on('sync', (state) => {
           if ( state === 'PREPARED' ) {
             console.log('synced');
@@ -38,6 +42,9 @@ class Puppet {
         });
       });
     });
+  }
+  getMatrixRoomMembers(roomId) {
+    return this.matrixRoomMembers[roomId] || [];
   }
   getClient() {
     return this.client;

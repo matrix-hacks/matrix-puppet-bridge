@@ -2,6 +2,10 @@ const debug = require('./debug')('Base');
 const Promise = require('bluebird');
 const { Bridge, RemoteUser } = require('matrix-appservice-bridge');
 const bangCommand = require('./bang-command');
+const url = require('url');
+const needle = require('needle');
+const mime = require('mime-types');
+const fs = require('fs');
 
 class Base {
   initThirdPartyClient() {
@@ -36,7 +40,11 @@ class Base {
   getPuppetThirdPartyUserId() {
     throw new Error('override me');
   }
-  sendMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _messageText) {
+  sendMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _messageText, _matrixEvent) {
+    throw new Error('override me');
+  }
+
+  sendPictureMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _messageText, _imageFile, _matrixEvent) {
     throw new Error('override me');
   }
 
@@ -46,6 +54,7 @@ class Base {
     this.config = config;
     this.puppet = puppet;
     this.domain = config.bridge.domain;
+    this.homeserver = url.parse(config.bridge.homeserverUrl);
     this.deduplicationTag = this.config.deduplicationTag || this.defaultDeduplicationTag();
     this.deduplicationTagPattern = this.config.deduplicationTagPattern || this.defaultDeduplicationTagPattern();
     this.deduplicationTagRegex = new RegExp(this.deduplicationTagPattern);
@@ -265,22 +274,46 @@ class Base {
     }
   }
   handleMatrixMessageEvent(data) {
-    const { info } = debug(this.handleMatrixMessageEvent.name);
-    const { room_id, content: { body, msgtype } } = data;
-    if (msgtype === 'm.motice') {
-      info("ignoring message of type notice because the only messages of this type that");
-      info("should show up in this room are those that were sent by the bridge itself");
-    } else if (msgtype === 'm.text') {
+    const logger = debug(this.handleMatrixMessageEvent.name);
+    const { room_id, content: { body, msgtype, info} } = data;
+    if (msgtype === 'm.notice') {
+      logger.info("ignoring message of type notice because the only messages of this type that");
+      logger.info("should show up in this room are those that were sent by the bridge itself");
+      return;
+    }
+
+    const thirdPartyRoomId = this.getThirdPartyRoomIdFromMatrixRoomId(room_id);
+    if (!thirdPartyRoomId) {
+      throw new Error('could not determine third party room id!!'); // XXX fire notice
+    }
+
+    const msg = this.tagMatrixMessage(body);
+
+    if (msgtype === 'm.text') {
       if (this.handleMatrixUserBangCommand) {
         const bc = bangCommand(body);
         if (bc) return this.handleMatrixUserBangCommand(bc, data);
       }
-      const thirdPartyRoomId = this.getThirdPartyRoomIdFromMatrixRoomId(room_id);
-      if (!thirdPartyRoomId) {
-        throw new Error('could not determine third party room id. aborting send message!');
-      }
-      const msg = this.tagMatrixMessage(body);
       return this.sendMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, data);
+    } else if (msgtype === 'm.image') {
+      logger.info("picture message from riot", body, info);
+
+      let img = url.parse(data.content.url);
+      const id = img.path.replace('/', '');
+      img.protocol = this.homeserver.protocol;
+      img.pathname = `/_matrix/media/v1/thumbnail/${img.host}${img.path}`;
+      img.query = { height: info.h, width: info.w };
+      const imageUrl = url.format(img);
+
+      const ext = mime.extension(info.mimetype);
+      const file = `/tmp/${id}.${ext}`;
+      const stream = fs.createWriteStream(file);
+
+      needle.get(imageUrl).pipe(stream).on('finish', ()=>{
+        logger.info('wrote image file to', file);
+        return this.sendPictureMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, file, data);
+      });
+
     }
   }
   defaultDeduplicationTag() {
