@@ -20,7 +20,7 @@ These bridges have been built using matrix-puppet-bridge:
 
 Right now I recommend you look at the examples. Right now the most complex example in terms of creating a client is imessage. The most complex example in terms of needing to make additional calls like looking up user info, check out the facebook one. For a basic middle-ground, check the groupme one.
 
-### Q: Why puppetting?
+### Q: What's puppetting and why does this use it?
 
 There are two kinds of puppetting happening here:
 #### 3rd party user puppetting
