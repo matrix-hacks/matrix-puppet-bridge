@@ -22,7 +22,13 @@ Right now I recommend you look at the examples. Right now the most complex examp
 
 ### Q: Why puppetting?
 
-Please see [this commit](https://github.com/kfatehi/matrix-appservice-imessage/commit/8a832051f79a94d7330be9e252eea78f76d774bc)
+There are two kinds of puppetting happening here:
+**3rd party user puppetting** The bridge is logging into hangouts/facebook/slack/etc in such a way that it appears to send messages as you. From the perspective of other hangouts/facebook/slack users, all messages appear to come from your actual user, not from a bot or anything along those lines.
+**matrix user puppetting** The bridge is logging into your matrix homeserver with your matrix username, and sometimes sends messages *as* your username. Why is this necessary? If you happen to send a message using a native hangouts/facebook/slack/etc client rather than using the bridge, we want to propogate the message you sent over to matrix somehow; This way you can see the entire context of your conversation within matrix, even if some of your messages were sent using a native hangouts/facebook/etc client. This means it has to appear to come from someone. So why not create a ghost/bot user that represents yourself, instead of logging in with your matrix user? Creating a ghost/bot user to represent yourself rather than logging in with your matrix user has the following limitations:
+* If the bridge is not logged in as you, it is not empowered with the ability to join you to roms. This means you must still manually accept invites for my matrix user to any newly created bridge rooms. This is especially bad if a brand new new contact messages you -- it creates a new room and you may get a push notif with the room invite but no notif containing their actual message text. You would have to open the matrix client and join the room to see their message.
+* If sending from the native hangouts/facebook/etc app, and this gets sent in matrix by a virtual secondary user/bot that represents yourself rather than your *real* self, this is considered a new unread message in the room, so the room state is changed to "unread" (bold room name in the matrix client). This does not really reflect the reality of the situation; Given I'm the one that sent the new message, I've of course already read the message. Ultimately this gets annoying, especially if you tend (like myself) to use these bold unread room states indicators to help quickly catch up on older missed messages.
+
+For these reasons (and some other minor reasons I won't mention here), we settled on puppetting the matrix user.
 
 ### Q: How can I prevent long push notification messages for 1 on 1 conversations?
 
