@@ -12,6 +12,7 @@ These bridges have been built using matrix-puppet-bridge:
 * https://github.com/kfatehi/matrix-puppet-groupme
 * https://github.com/kfatehi/matrix-puppet-facebook
 * https://github.com/kfatehi/matrix-puppet-slack
+* https://github.com/AndrewJDR/matrix-puppet-hangouts
 
 ## FAQ
 
