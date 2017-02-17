@@ -16,6 +16,12 @@ These bridges have been built using matrix-puppet-bridge:
 
 ## FAQ
 
+### Q: Is this made to handle several facebook/hangouts/slack users within one bridge? In other words, can I use this for "mass hosting" of many facebook/hangouts/slack with one matrix homeserver?
+
+This is not designed for mass hosting of bridges. Several of the protocols we support do not lend themselves well to mass hosting. For example, the iMessage bridge must run on osx, and authentication must be handled by using the login gui of the iMessages app, and there's not a clean way of running multiple iMessages apps and automating them. Beyond that, a couple of other protocls do not support a proper oauth workflow (see facebook which definitely does not unless it's for a 'bot user', and to some extent hangouts doesn't support it either [though unsupported techniques do exist]), so any kind of "mass hosting" setup that allowed for configuration of these bridges via a "/nickserv" type interface would require sending your facebook/hangouts password to a "man in the middle" (homeserver in this case). This is just not acceptable to the authors of this framework, so you will probably never see it implemented by us.
+
+In summary, this bridge framework is explicitly for bridges that are "personal" in nature. It assumes the user cares a great deal about the privacy of their facebook/hangouts/imessage/etc passwords and messages, and as such desire to run their own homeserver and all their own bridges.
+
 ### Q: What about service X?
 
 Right now I recommend you look at the examples. Right now the most complex example in terms of creating a client is imessage. The most complex example in terms of needing to make additional calls like looking up user info, check out the facebook one. For a basic middle-ground, check the groupme one.
