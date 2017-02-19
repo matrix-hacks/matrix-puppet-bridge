@@ -111,7 +111,7 @@ class Base {
       return room_id;
     }, (_err) => {
       const name = this.getServiceName() + " Protocol";
-      const topic = this.getServicePrefix() + " Protocol Status Messages";
+      const topic = this.getServiceName() + " Protocol Status Messages";
       info("creating status room !!!!", ">>>>"+roomAliasLocalPart+"<<<<", name, topic);
       return puppetClient.createRoom({
         name, topic, room_alias_name: roomAliasLocalPart
