@@ -58,6 +58,22 @@ class Base {
     throw new Error('override me');
   }
 
+  /**
+   * Return a postfix for the status room name.
+   * It should be fairly unique so that it's unlikely to clash with a legitmate user.
+   * (Let's hope nobody likes the name 'puppetStatusRoom')
+   *
+   * If you use the default below, the bridge room's alias will end up being
+   * something like '#groupme_puppetStatusRoom'.
+   *
+   * There should be no need to override this.
+   *
+   * @returns {string} Postfix for the status room name.
+   */
+  getStatusRoomPostfix() {
+    return "puppetStatusRoom";
+  }
+
   constructor(config, puppet, bridge) {
     const { info } = debug();
     this.allowNullSenderName = false;
@@ -98,9 +114,15 @@ class Base {
       }
     }));
   }
-  sendThirdPartyProtocolStatusMsg(msgText) {
-    const { warn, info } = debug(this.sendThirdPartyProtocolStatusMsg.name);
-    const roomAliasLocalPart = this.getServicePrefix()+"_status";
+  sendStatusMsg(msgText, options) {
+    options = options || {};
+    if (options.fixedWidthOutput === undefined)
+    {
+      options.fixedWidthOutput = true;
+    }
+
+    const { warn, info } = debug(this.sendStatusMsg.name);
+    const roomAliasLocalPart = this.getServicePrefix()+"_"+this.getStatusRoomPostfix();
     const roomAlias = "#"+roomAliasLocalPart+":"+this.domain;
 
     const puppetClient = this.puppet.getClient();
@@ -150,12 +172,22 @@ class Base {
       //promiseList.push(() => botIntent.setDisplayName(this.getServiceName() + " Bot"));
 
       promiseList.push(() => {
-        return botIntent.sendMessage(statusRoomId, {
-          body: msgText,
-          formatted_body: "<pre><code>" + msgText + "</code></pre>",
-          format: "org.matrix.custom.html",
-          msgtype: "m.notice" // <-- Important! Or we will cause message looping...
-        });
+        if(options.fixedWidthOutput)
+        {
+          return botIntent.sendMessage(statusRoomId, {
+            body: msgText,
+            formatted_body: "<pre><code>" + msgText + "</code></pre>",
+            format: "org.matrix.custom.html",
+            msgtype: "m.notice" // <-- Important! Or we will cause message looping...
+          });
+        }
+        else
+        {
+          return botIntent.sendMessage(statusRoomId, {
+            body: msgText,
+            msgtype: "m.notice" // <-- Important! Or we will cause message looping...
+          });
+        }
       });
 
       return Promise.mapSeries(promiseList, p => p());
@@ -358,6 +390,14 @@ class Base {
     const thirdPartyRoomId = this.getThirdPartyRoomIdFromMatrixRoomId(room_id);
     if (!thirdPartyRoomId) {
       throw new Error('could not determine third party room id!!'); // XXX fire notice
+    }
+
+    // We may wish to process bang commands here at some point,
+    // but for now let's just drop these.
+    if (thirdPartyRoomId == this.getStatusRoomPostfix())
+    {
+      logger.info("ignoring incoming message to status room");
+      return;
     }
 
     const msg = this.tagMatrixMessage(body);
