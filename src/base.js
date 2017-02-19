@@ -33,6 +33,16 @@ class Base {
     throw new Error("override me");
   }
   /**
+   * A friendly name for the protocol.
+   * Use proper capitalization and make it look nice.
+   * e.g. return "GroupMe"
+   *
+   * @returns {string} A friendly name for the bridged protocol.
+   */
+  getServiceName() {
+    throw new Error("override me");
+  }
+  /**
    * Return a user id to match against 3rd party user id's in order to know if the message is of self-origin
    *
    * @returns {string} Your user ID from the perspective of the third party
@@ -87,6 +97,69 @@ class Base {
         }
       }
     }));
+  }
+  sendThirdPartyProtocolStatusMsg(msgText) {
+    const { warn, info } = debug(this.sendThirdPartyProtocolStatusMsg.name);
+    const roomAliasLocalPart = this.getServicePrefix()+"_status";
+    const roomAlias = "#"+roomAliasLocalPart+":"+this.domain;
+
+    const puppetClient = this.puppet.getClient();
+
+    info('looking up', roomAlias);
+    return puppetClient.getRoomIdForAlias(roomAlias).then(({room_id}) => {
+      info("found matrix room via alias. room_id:", room_id);
+      return room_id;
+    }, (_err) => {
+      const name = this.getServiceName() + " Protocol";
+      const topic = this.getServicePrefix() + " Protocol Status Messages";
+      info("creating status room !!!!", ">>>>"+roomAliasLocalPart+"<<<<", name, topic);
+      return puppetClient.createRoom({
+        name, topic, room_alias_name: roomAliasLocalPart
+      }).then(({room_id}) => {
+        info("room created", room_id, roomAliasLocalPart);
+        return room_id;
+      });
+    }).then(matrixRoomId => {
+      info("making puppet join room", matrixRoomId);
+      return puppetClient.joinRoom(matrixRoomId).then(()=>{
+        info("returning room id after join room attempt", matrixRoomId);
+        return matrixRoomId;
+      }, (err) => {
+        if ( err.message === 'No known servers' ) {
+          warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
+          return puppetClient.deleteAlias(roomAlias).then(()=>{
+            warn('deleted alias... trying again to get or create room.');
+            return this.getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId)
+          })
+        } else {
+          warn("ignoring error from puppet join room: ", err.message);
+          return matrixRoomId;
+        }
+      });
+    }).then(statusRoomId => {
+      var botIntent = this.bridge.getIntent();
+      let promiseList = [];
+
+      promiseList.push(() => {
+        info("joining protocol bot to room >>>", statusRoomId, "<<<");
+        botIntent.join(statusRoomId)
+      });
+
+      // AS Bots don't have display names? Weird...
+      // PUT https://<REDACTED>/_matrix/client/r0/profile/%40hangoutsbot%3Aexample.org/displayname (AS) HTTP 404 Error: {"errcode":"M_UNKNOWN","error":"No row found"}
+      //promiseList.push(() => botIntent.setDisplayName(this.getServiceName() + " Bot"));
+
+      promiseList.push(() => {
+        return botIntent.sendMessage(statusRoomId, {
+          body: msgText,
+          formatted_body: "<pre><code>" + msgText + "</code></pre>",
+          format: "org.matrix.custom.html",
+          msgtype: "m.notice" // <-- Important! Or we will cause message looping...
+        });
+      });
+
+      return Promise.mapSeries(promiseList, p => p());
+    });
   }
   getGhostUserFromThirdPartySenderId(id) {
     return "@"+this.getServicePrefix()+"_"+id+":"+this.domain;
