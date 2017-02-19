@@ -6,6 +6,7 @@ const url = require('url');
 const needle = require('needle');
 const mime = require('mime-types');
 const fs = require('fs');
+const inspect = require('util').inspect;
 
 class Base {
   initThirdPartyClient() {
@@ -114,11 +115,32 @@ class Base {
       }
     }));
   }
-  sendStatusMsg(msgText, options) {
-    options = options || {};
+  sendStatusMsg() {
+    var options = arguments[0] || {};
     if (options.fixedWidthOutput === undefined)
     {
       options.fixedWidthOutput = true;
+    }
+
+    var msgText = "";
+    for(var aa = 1; aa < arguments.length; aa++)
+    {
+      if(aa > 1)
+      {
+        msgText += " ";
+      }
+
+      if( 0
+        || typeof arguments[aa] === 'string'
+        || typeof arguments[aa] === 'number'
+      )
+      {
+        msgText += arguments[aa].toString();
+      }
+      else
+      {
+        msgText += inspect(arguments[aa], {depth:null,showHidden:true});
+      }
     }
 
     const { warn, info } = debug(this.sendStatusMsg.name);
