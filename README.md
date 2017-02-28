@@ -101,3 +101,9 @@ class App extends MatrixPuppetBridgeBase {
 Run this in your bridge directory:
 
 `node -e "new (require('matrix-puppet-bridge').Puppet)('config.json').associate()"`
+
+### Q: Where can I ask questions?
+
+You can use GitHub issues on this or any other puppet-bridge projects.
+
+Alternatively you can join [#matrix-puppet-bridge:matrix.org](https://riot.im/app/#/room/#matrix-puppet-bridge:matrix.org)
