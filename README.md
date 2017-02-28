@@ -16,6 +16,18 @@ These bridges have been built using matrix-puppet-bridge:
 
 ## FAQ
 
+### Q: Any way to disable appending [m] to messages?
+
+Yes. Append the following to config.json right before the last closing brace.
+
+```json
+"deduplicationTag" : " \ufeff",
+"deduplicationTagPattern" : " \\ufeff$"
+```
+
+Let us know if this doesn't work on a particular protocol!
+For more information, see [this discussion](https://github.com/kfatehi/matrix-puppet-facebook/issues/6).
+
 ### Q: Is this made to handle several facebook/hangouts/slack users within one bridge? In other words, can I use this for "mass hosting" of many facebook/hangouts/slack with one matrix homeserver?
 
 This is not designed for mass hosting of bridges. Several of the protocols we support do not lend themselves well to mass hosting. For example, the iMessage bridge must run on osx, and authentication must be handled by using the login gui of the iMessages app, and there's not a clean way of running multiple iMessages apps and automating them. Beyond that, a couple of other protocls do not support a proper oauth workflow (see facebook which definitely does not unless it's for a 'bot user', and to some extent hangouts doesn't support it either [though unsupported techniques do exist]), so any kind of "mass hosting" setup that allowed for configuration of these bridges via a "/nickserv" type interface would require sending your facebook/hangouts password to a "man in the middle" (homeserver in this case). This is just not acceptable to the authors of this framework, so you will probably never see it implemented by us.
