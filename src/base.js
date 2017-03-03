@@ -115,41 +115,32 @@ class Base {
       }
     }));
   }
-  sendStatusMsg() {
-    var options = arguments[0] || {};
+  sendStatusMsg(options={}, ...args) {
+    if (typeof options !== 'object') {
+      throw new Error('sendStatusMsg requires first parameter to be an options object which can be empty.');
+    }
     if (options.fixedWidthOutput === undefined)
     {
       options.fixedWidthOutput = true;
     }
 
-    var msgText = "";
-    for(var aa = 1; aa < arguments.length; aa++)
-    {
-      if(aa > 1)
-      {
-        msgText += " ";
+    const msgText = args.reduce((acc, arg, index)=>{
+      const sep = index > 0 ? ' ' : '';
+      if (typeof arg === 'object') {
+        return acc+sep+inspect(arg, {depth:null,showHidden:true});
+      } else {
+        return acc+sep+arg.toString();
       }
-
-      if( 0
-        || typeof arguments[aa] === 'string'
-        || typeof arguments[aa] === 'number'
-      )
-      {
-        msgText += arguments[aa].toString();
-      }
-      else
-      {
-        msgText += inspect(arguments[aa], {depth:null,showHidden:true});
-      }
-    }
+    }, '');
 
     const { warn, info } = debug(this.sendStatusMsg.name);
-    const roomAliasLocalPart = this.getServicePrefix()+"_"+this.getStatusRoomPostfix();
+    const roomAliasLocalPart = options.roomAliasLocalPart || this.getServicePrefix()+"_"+this.getStatusRoomPostfix();
     const roomAlias = "#"+roomAliasLocalPart+":"+this.domain;
 
     const puppetClient = this.puppet.getClient();
 
     info('looking up', roomAlias);
+    info('gonna send', msgText);
     return puppetClient.getRoomIdForAlias(roomAlias).then(({room_id}) => {
       info("found matrix room via alias. room_id:", room_id);
       return room_id;
@@ -182,6 +173,10 @@ class Base {
       });
     }).then(statusRoomId => {
       var botIntent = this.bridge.getIntent();
+      if (botIntent === null) {
+        warn('cannot send a status message before the bridge is ready');
+        return false;
+      }
       let promiseList = [];
 
       promiseList.push(() => {
