@@ -434,20 +434,20 @@ class Base {
     } else if (msgtype === 'm.image') {
       logger.info("picture message from riot", body, info);
 
+      // check lib/content-repo.js 
+      // it has a getHttpUriForMxc method we should probably use instead
+      // or rather its main callee lib/client.js
+      // which has mxcUrlToHttp method defined
       let img = url.parse(data.content.url);
-      const id = img.path.replace('/', '');
       img.protocol = this.homeserver.protocol;
       img.pathname = `/_matrix/media/v1/thumbnail/${img.host}${img.path}`;
       img.query = { height: info.h, width: info.w };
       const imageUrl = url.format(img);
 
       const ext = mime.extension(info.mimetype);
-      const file = `/tmp/${id}.${ext}`;
-      const stream = fs.createWriteStream(file);
 
-      needle.get(imageUrl).pipe(stream).on('finish', ()=>{
-        logger.info('wrote image file to', file);
-        return this.sendPictureMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, file, data);
+      return this.downloadFileFromPublicWeb(imageUrl, ext).then((localPath)=>{
+        return this.sendPictureMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, localPath, data);
       });
 
     }
