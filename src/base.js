@@ -468,13 +468,13 @@ class Base {
    * Download a file from the web
    *
    * @param {string} webUrl any resource on the public web
-   * @param {string} fileExtension=null optional extension to use for tempfile, e.g. ".png"
+   * @param {string} optional file extension to use for tempfile, e.g. ".png"
    * @returns {Promise} path to local file
    */
-  downloadFileFromPublicWeb(webUrl, fileExtension=null) {
+  downloadFileFromPublicWeb(webUrl, ext=null) {
     const { info }  = debug(this.downloadFileFromPublicWeb.name);
     return new Promise(function(resolve, reject) {
-      const filepath = tempfile(fileExtension);
+      const filepath = tempfile(ext && ext[0] !== '.' ? '.'+ext : ext);
       const destination = fs.createWriteStream(filepath);
       const download = needle.get(webUrl).pipe(destination);
       download.on('error', reject);
