@@ -8,11 +8,11 @@ There is a common pattern in this style of bridge, such as duplicate message iss
 
 These bridges have been built using matrix-puppet-bridge:
 
-* https://github.com/kfatehi/matrix-puppet-imessage
-* https://github.com/kfatehi/matrix-puppet-groupme
-* https://github.com/kfatehi/matrix-puppet-facebook
-* https://github.com/kfatehi/matrix-puppet-slack
-* https://github.com/AndrewJDR/matrix-puppet-hangouts
+* https://github.com/matrix-hacks/matrix-puppet-imessage
+* https://github.com/matrix-hacks/matrix-puppet-groupme
+* https://github.com/matrix-hacks/matrix-puppet-facebook
+* https://github.com/matrix-hacks/matrix-puppet-slack
+* https://github.com/matrix-hacks/matrix-puppet-hangouts
 
 ## FAQ
 
@@ -26,7 +26,7 @@ Yes. Append the following to config.json right before the last closing brace.
 ```
 
 Let us know if this doesn't work on a particular protocol!
-For more information, see [this discussion](https://github.com/kfatehi/matrix-puppet-facebook/issues/6).
+For more information, see [this discussion](https://github.com/matrix-hacks/matrix-puppet-facebook/issues/6).
 
 ### Q: Is this made to handle several facebook/hangouts/slack users within one bridge? In other words, can I use this for "mass hosting" of many facebook/hangouts/slack with one matrix homeserver?
 
