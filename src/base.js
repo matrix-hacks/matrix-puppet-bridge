@@ -7,6 +7,8 @@ const needle = require('needle');
 const mime = require('mime-types');
 const fs = require('fs');
 const inspect = require('util').inspect;
+const tempfile = require('tempfile');
+const path = require('path');
 
 class Base {
   initThirdPartyClient() {
@@ -328,6 +330,7 @@ class Base {
       roomId,
       senderName,
       senderId,
+      avatarUrl,
       text,
       html
     } = thirdPartyRoomMessageData;
@@ -368,6 +371,9 @@ class Base {
 
         if (senderName)
           promiseList.push(() => ghostIntent.setDisplayName(senderName));
+
+        if (avatarUrl)
+          promiseList.push(() => this.setGhostAvatar(ghostIntent, avatarUrl));
 
         promiseList.push(() => {
           if (html) {
@@ -457,6 +463,52 @@ class Base {
   }
   isTaggedMatrixMessage(text) {
     return this.deduplicationTagRegex.test(text);
+  }
+  /**
+   * Download a file from the web
+   *
+   * @param {string} webUrl any resource on the public web
+   * @param {string} fileExtension=null optional extension to use for tempfile, e.g. ".png"
+   * @returns {Promise} path to local file
+   */
+  downloadFileFromPublicWeb(webUrl, fileExtension=null) {
+    const { info }  = debug(this.downloadFileFromPublicWeb.name);
+    return new Promise(function(resolve, reject) {
+      const filepath = tempfile(fileExtension);
+      const destination = fs.createWriteStream(filepath);
+      const download = needle.get(webUrl).pipe(destination);
+      download.on('error', reject);
+      download.on('finish', ()=>{
+        info('downloaded file', filepath);
+        resolve(filepath);
+      });
+    });
+  }
+  /**
+   * Sets the ghost avatar using a regular URL
+   *
+   * @param {Intent} ghostIntent represents the ghost user
+   * @param {string} avatarUrl a resource on the public web
+   * @returns {Promise}
+   */
+  setGhostAvatar(ghostIntent, avatarUrl) {
+    const { info }  = debug(this.setGhostAvatar.name);
+    const ext = path.extname(avatarUrl);
+    info('downloading avatar from public web', avatarUrl);
+    const puppetClient = this.puppet.getClient();
+    return this.downloadFileFromPublicWeb(avatarUrl, ext).then((localPath)=>{
+      return puppetClient.uploadContent(fs.createReadStream(localPath), {
+        name: path.basename(avatarUrl),
+        type: mime.contentType(ext),
+        rawResponse: false
+      });
+    }).then((res)=>{
+      const contentUri = res.content_uri;
+      info('uploaded avatar and got back content uri', contentUri);
+      return ghostIntent.setAvatarUrl(contentUri);
+    }).catch(err=>{
+      throw err;
+    });
   }
 }
 
