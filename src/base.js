@@ -465,6 +465,7 @@ class Base {
     return new Promise(function(resolve, reject) {
       const filepath = tempfile(ext && ext[0] !== '.' ? '.'+ext : ext);
       const destination = fs.createWriteStream(filepath);
+      info('downloading', webUrl);
       const download = needle.get(webUrl).pipe(destination);
       download.on('error', reject);
       download.on('finish', ()=>{
