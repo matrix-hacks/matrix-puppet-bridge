@@ -476,6 +476,12 @@ class Base {
   }
   /**
    * Sets the ghost avatar using a regular URL
+   * Will check to see if an existing avatar exists, and if so,
+   * will not bother downloading from URL, uploading to media store,
+   * and setting in the ghost user profile. Why? I do not know if
+   * this is the same image or a different one, and without such
+   * information, we'd constantly be running this whole routine
+   * for the same exact image.
    *
    * @param {Intent} ghostIntent represents the ghost user
    * @param {string} avatarUrl a resource on the public web
@@ -483,21 +489,29 @@ class Base {
    */
   setGhostAvatar(ghostIntent, avatarUrl) {
     const { info }  = debug(this.setGhostAvatar.name);
-    const ext = path.extname(avatarUrl);
-    info('downloading avatar from public web', avatarUrl);
-    const puppetClient = this.puppet.getClient();
-    return this.downloadFileFromPublicWeb(avatarUrl, ext).then((localPath)=>{
-      return puppetClient.uploadContent(fs.createReadStream(localPath), {
-        name: path.basename(avatarUrl),
-        type: mime.contentType(ext),
-        rawResponse: false
-      });
-    }).then((res)=>{
-      const contentUri = res.content_uri;
-      info('uploaded avatar and got back content uri', contentUri);
-      return ghostIntent.setAvatarUrl(contentUri);
-    }).catch(err=>{
-      throw err;
+    const client = ghostIntent.getClient();
+
+    return client.getProfileInfo(client.credentials.userId, 'avatar_url').then(({avatar_url})=>{
+      if (avatar_url) {
+        info('refusing to overwrite existing avatar');
+        return null;
+      } else {
+        const ext = path.extname(avatarUrl);
+        info('downloading avatar from public web', avatarUrl);
+        return this.downloadFileFromPublicWeb(avatarUrl, ext).then((localPath)=>{
+          return client.uploadContent(fs.createReadStream(localPath), {
+            name: path.basename(avatarUrl),
+            type: mime.contentType(ext),
+            rawResponse: false
+          });
+        }).then((res)=>{
+          const contentUri = res.content_uri;
+          info('uploaded avatar and got back content uri', contentUri);
+          return ghostIntent.setAvatarUrl(contentUri);
+        }).catch(err=>{
+          throw err;
+        });
+      }
     });
   }
 }
