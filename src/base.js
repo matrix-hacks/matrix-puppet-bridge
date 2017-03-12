@@ -1,4 +1,5 @@
 const debug = require('./debug')('Base');
+const utils = require('./utils.js');
 const Promise = require('bluebird');
 const { Bridge, RemoteUser } = require('matrix-appservice-bridge');
 const bangCommand = require('./bang-command');
@@ -323,7 +324,74 @@ class Base {
   /**
    * Returns a promise
    */
-  handleThirdPartyRoomMessage(thirdPartyRoomMessageData, doNotTryToGetRemoteUserStoreData) {
+  getUserClient(roomId, senderId, senderName, avatarUrl, text, doNotTryToGetRemoteUserStoreData) {
+    const { info } = debug(this.getUserClient.name);
+    info("get user intent for third party user %s (%s)", senderId, senderName);
+
+    if (senderId === undefined) {
+      return Promise.resolve(this.puppet.getClient());
+    } else {
+      if (!senderName && !this.allowNullSenderName) {
+        if (doNotTryToGetRemoteUserStoreData)
+          throw new Error('preventing an endless loop');
+
+        info("no senderName provided with payload, will check store");
+        return this.getOrInitRemoteUserStoreDataFromThirdPartyUserId(senderId).then((remoteUser)=>{
+          info("got remote user from store, with a possible client API call in there somewhere", remoteUser);
+          info("will retry now");
+          const senderName = remoteUser.get('senderName');
+          return this.getUserClient(roomId, senderId, senderName, true);
+        });
+      }
+
+      info("this message was not sent by me");
+      const ghostIntent = this.getIntentFromThirdPartySenderId(senderId);
+      let promiseList = [];
+      promiseList.push(() => ghostIntent.join(roomId));
+
+      if (senderName)
+        promiseList.push(() => ghostIntent.setDisplayName(senderName));
+
+      if (avatarUrl)
+        promiseList.push(() => this.setGhostAvatar(ghostIntent, avatarUrl));
+
+      return Promise.all(promiseList).then(() => ghostIntent.getClient());
+    }
+  }
+  /**
+   * Returns a promise
+   */
+  handleThirdPartyRoomImageMessage(thirdPartyRoomImageMessageData) {
+    const { info } = debug(this.handleThirdPartyRoomMessage.name);
+    info('handling third party room image message', thirdPartyRoomImageMessageData);
+    const {
+      roomId,
+      senderName,
+      senderId,
+      avatarUrl,
+      text,
+      url,
+      h,
+      w,
+      mimetype
+    } = thirdPartyRoomImageMessageData;
+
+    return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((matrixRoomId) => {
+      return this.getUserClient(roomId, senderId, senderName).then((client) => {
+        return utils.uploadContentFromUrl(client, url, text)
+          .then((obj) => client.sendImageMessage(matrixRoomId, obj.mxc_url, {
+            mimetype: mimetype,
+            h: h,
+            w: w,
+            size: obj.size
+          }, text))
+      });
+    });
+  }
+  /**
+   * Returns a promise
+   */
+  handleThirdPartyRoomMessage(thirdPartyRoomMessageData) {
     const { info } = debug(this.handleThirdPartyRoomMessage.name);
     info('handling third party room message', thirdPartyRoomMessageData);
     const {
@@ -335,60 +403,37 @@ class Base {
       html
     } = thirdPartyRoomMessageData;
 
-    return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((roomId)=> {
-      info("got or created matrix room with id", roomId);
-      if ( senderId === undefined ) {
-        info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
-        info("if it came from a 3rd party client, we want to repeat it as a 'notice' message type");
-        info("if it came from a matrix client, then it's already in the client, sending again would dupe");
-        info("we use a tag on the end of messages to determine if it came from matrix");
-        if (this.isTaggedMatrixMessage(text)) {
-          info('it is from matrix, so just ignore it.');
-        } else {
-          info('it is from 3rd party client, so repeat it as a notice');
-          return Promise.mapSeries([
-            () => this.puppet.getClient().sendNotice(roomId, text)
-          ], p => p());
-        }
-      } else {
+    return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((matrixRoomId) => {
+      return this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl, text).then((client) => {
+        if (senderId === undefined) {
+          info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
+          info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
+          info("if it came from a matrix client, then it's already in the client, sending again would dupe");
+          info("we use a tag on the end of messages to determine if it came from matrix");
 
-        if (!senderName && !this.allowNullSenderName) {
-          if ( doNotTryToGetRemoteUserStoreData ) throw new Error('preventing an endless loop');
-          info("no senderName provided with payload, will check store");
-          return this.getOrInitRemoteUserStoreDataFromThirdPartyUserId(senderId).then((remoteUser)=>{
-            info("got remote user from store, with a possible client API call in there somewhere", remoteUser);
-            const userData = { senderName: remoteUser.get('senderName') };
-            info("will retry now, once, after merging payload with remote user data", userData);
-            const newPayload = Object.assign({}, thirdPartyRoomMessageData, userData);
-            return this.handleThirdPartyRoomMessage(newPayload, true);
+          if (this.isTaggedMatrixMessage(text)) {
+            info('it is from matrix, so just ignore it.');
+            return;
+          } else {
+            info('it is from 3rd party client');
+            return client.sendNotice(matrixRoomId, text);
+          }
+        }
+
+        if (html) {
+          return client.sendMessage(matrixRoomId, {
+            body: text,
+            formatted_body: html,
+            format: "org.matrix.custom.html",
+            msgtype: "m.text"
+          });
+        } else {
+          return client.sendMessage(matrixRoomId, {
+            body: text,
+            msgtype: "m.text"
           });
         }
-
-        info("this message was not sent by me, send it the matrix room via ghost user as text");
-        const ghostIntent = this.getIntentFromThirdPartySenderId(senderId);
-        let promiseList = [];
-        promiseList.push(() => ghostIntent.join(roomId));
-
-        if (senderName)
-          promiseList.push(() => ghostIntent.setDisplayName(senderName));
-
-        if (avatarUrl)
-          promiseList.push(() => this.setGhostAvatar(ghostIntent, avatarUrl));
-
-        promiseList.push(() => {
-          if (html) {
-            return ghostIntent.sendMessage(roomId, {
-              body: text,
-              formatted_body: html,
-              format: "org.matrix.custom.html",
-              msgtype: "m.text"
-            });
-          } else {
-            return ghostIntent.sendText(roomId, text);
-          }
-        });
-        return Promise.mapSeries(promiseList, p => p());
-      }
+      });
     });
   }
   handleMatrixEvent(req, _context) {
