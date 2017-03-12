@@ -1,4 +1,4 @@
-const debug     = require('debug')('matrix-puppet:facebook:utils');
+const debug     = require('./debug')('Utils');
 const http      = require("http");
 const https     = require("https");
 const mime      = require("mime");
