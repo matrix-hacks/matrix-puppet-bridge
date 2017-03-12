@@ -437,7 +437,7 @@ class Base {
       const imageUrl = this.puppet.getClient().mxcUrlToHttp(data.content.url);
       const ext = mime.extension(info.mimetype);
       return this.downloadFileFromPublicWeb(imageUrl, ext).then((localPath)=>{
-        return this.sendPictureMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, localPath, data);
+        return this.sendPictureMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, localPath, data, imageUrl);
       });
     }
   }
