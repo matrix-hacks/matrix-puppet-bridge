@@ -384,7 +384,7 @@ class Base {
             h: h,
             w: w,
             size: obj.size
-          }, text))
+          }, this.tagMatrixMessage(text)))
       });
     });
   }
@@ -416,20 +416,22 @@ class Base {
             return;
           } else {
             info('it is from 3rd party client');
-            return client.sendNotice(matrixRoomId, text);
           }
         }
 
+        // tag the message to know it was send by the bridge
+        const msg = this.tagMatrixMessage(text);
+
         if (html) {
           return client.sendMessage(matrixRoomId, {
-            body: text,
+            body: msg,
             formatted_body: html,
             format: "org.matrix.custom.html",
             msgtype: "m.text"
           });
         } else {
           return client.sendMessage(matrixRoomId, {
-            body: text,
+            body: msg,
             msgtype: "m.text"
           });
         }
@@ -449,9 +451,8 @@ class Base {
   handleMatrixMessageEvent(data) {
     const logger = debug(this.handleMatrixMessageEvent.name);
     const { room_id, content: { body, msgtype, info} } = data;
-    if (msgtype === 'm.notice') {
-      logger.info("ignoring message of type notice because the only messages of this type that");
-      logger.info("should show up in this room are those that were sent by the bridge itself");
+    if (this.isTaggedMatrixMessage(body)) {
+      logger.info("ignoring tagged message, it was send by the bridge");
       return;
     }
 
