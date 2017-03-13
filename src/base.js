@@ -1,5 +1,4 @@
 const debug = require('./debug')('Base');
-const utils = require('./utils.js');
 const Promise = require('bluebird');
 const { Bridge, RemoteUser } = require('matrix-appservice-bridge');
 const bangCommand = require('./bang-command');
@@ -364,7 +363,7 @@ class Base {
   handleThirdPartyRoomImageMessage(thirdPartyRoomImageMessageData) {
     const { info } = debug(this.handleThirdPartyRoomMessage.name);
     info('handling third party room image message', thirdPartyRoomImageMessageData);
-    const {
+    let {
       roomId,
       senderName,
       senderId,
@@ -376,15 +375,25 @@ class Base {
       mimetype
     } = thirdPartyRoomImageMessageData;
 
+    if (mimetype === undefined) {
+      info("No content-type given by server, guessing based on file name.");
+      mimetype = mime.lookup(url);
+    }
+
     return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((matrixRoomId) => {
       return this.getUserClient(roomId, senderId, senderName).then((client) => {
-        return utils.uploadContentFromUrl(client, url, text)
-          .then((obj) => client.sendImageMessage(matrixRoomId, obj.mxc_url, {
+        return this.downloadFileFromPublicWeb(url).then((localPath) => {
+          return client.uploadContent(fs.createReadStream(localPath), {
+            name: text,
+            type: mimetype,
+            rawResponse: false
+          }).then((res) => client.sendImageMessage(matrixRoomId, res.content_uri, {
             mimetype: mimetype,
             h: h,
             w: w,
-            size: obj.size
-          }, this.tagMatrixMessage(text)))
+            size: fs.statSync(localPath).size
+          }, this.tagMatrixMessage(text)));
+        });
       });
     });
   }
