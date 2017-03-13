@@ -392,7 +392,7 @@ class Base {
             h: h,
             w: w,
             size: fs.statSync(localPath).size
-          }, this.tagMatrixMessage(text)));
+          }, this.tagMatrixMessage(text))).then(() => fs.unlink(localPath));
         });
       });
     });
