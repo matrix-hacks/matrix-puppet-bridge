@@ -392,7 +392,10 @@ class Base {
             h: h,
             w: w,
             size: fs.statSync(localPath).size
-          }, this.tagMatrixMessage(text))).then(() => fs.unlink(localPath));
+          }, this.tagMatrixMessage(text)), (e) => client.sendMessage(matrixRoomId, {
+            body: this.tagMatrixMessage(url),
+            msgtype: "m.text"
+          })).then(() =>fs.unlink(localPath));
         });
       });
     });
