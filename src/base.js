@@ -323,9 +323,9 @@ class Base {
   /**
    * Returns a promise
    */
-  getUserClient(roomId, senderId, senderName, avatarUrl, text, doNotTryToGetRemoteUserStoreData) {
+  getUserClient(roomId, senderId, senderName, avatarUrl, doNotTryToGetRemoteUserStoreData) {
     const { info } = debug(this.getUserClient.name);
-    info("get user intent for third party user %s (%s)", senderId, senderName);
+    info("get user client for third party user %s (%s)", senderId, senderName);
 
     if (senderId === undefined) {
       return Promise.resolve(this.puppet.getClient());
@@ -339,22 +339,22 @@ class Base {
           info("got remote user from store, with a possible client API call in there somewhere", remoteUser);
           info("will retry now");
           const senderName = remoteUser.get('senderName');
-          return this.getUserClient(roomId, senderId, senderName, true);
+          return this.getUserClient(roomId, senderId, senderName, avatarUrl, true);
         });
       }
 
       info("this message was not sent by me");
       const ghostIntent = this.getIntentFromThirdPartySenderId(senderId);
-      let promiseList = [];
-      promiseList.push(() => ghostIntent.join(roomId));
+      return ghostIntent.join(roomId).then(() => {
+        let promiseList = [];
+        if (senderName)
+          promiseList.push(() => ghostIntent.setDisplayName(senderName));
 
-      if (senderName)
-        promiseList.push(() => ghostIntent.setDisplayName(senderName));
+        if (avatarUrl)
+          promiseList.push(() => this.setGhostAvatar(ghostIntent, avatarUrl));
 
-      if (avatarUrl)
-        promiseList.push(() => this.setGhostAvatar(ghostIntent, avatarUrl));
-
-      return Promise.all(promiseList).then(() => ghostIntent.getClient());
+        return Promise.all(promiseList).then(() => ghostIntent.getClient());
+      }).then(() => ghostIntent.getClient());
     }
   }
   /**
@@ -381,7 +381,7 @@ class Base {
     }
 
     return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((matrixRoomId) => {
-      return this.getUserClient(roomId, senderId, senderName).then((client) => {
+      return this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl).then((client) => {
         return this.downloadFileFromPublicWeb(url).then((localPath) => {
           return client.uploadContent(fs.createReadStream(localPath), {
             name: text,
@@ -413,7 +413,7 @@ class Base {
     } = thirdPartyRoomMessageData;
 
     return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((matrixRoomId) => {
-      return this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl, text).then((client) => {
+      return this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl).then((client) => {
         if (senderId === undefined) {
           info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
           info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
@@ -428,7 +428,7 @@ class Base {
           }
         }
 
-        // tag the message to know it was send by the bridge
+        // tag the message to know it was sent by the bridge
         const msg = this.tagMatrixMessage(text);
 
         if (html) {
@@ -461,7 +461,7 @@ class Base {
     const logger = debug(this.handleMatrixMessageEvent.name);
     const { room_id, content: { body, msgtype, info} } = data;
     if (this.isTaggedMatrixMessage(body)) {
-      logger.info("ignoring tagged message, it was send by the bridge");
+      logger.info("ignoring tagged message, it was sent by the bridge");
       return;
     }
 
