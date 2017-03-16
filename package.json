@@ -4,7 +4,8 @@
   "description": "facilitates writing a certain kind of matrix bridge",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"no tests at this time\"; exit 1"
+    "test": "echo \"no tests at this time\"; exit 1",
+    "gendoc": "jsdoc -r src -P package.json -R README.md -d docs"
   },
   "keywords": [
     "matrix"
@@ -29,7 +30,8 @@
     "tempfile": "^1.1.1"
   },
   "devDependencies": {
-    "eslint": "^3.12.2"
+    "eslint": "^3.12.2",
+    "jsdoc": "^3.4.3"
   },
   "eslintConfig": {
     "env": {
