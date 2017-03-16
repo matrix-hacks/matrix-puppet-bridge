@@ -3,12 +3,10 @@ const Promise = require('bluebird');
 const { Bridge, RemoteUser } = require('matrix-appservice-bridge');
 const bangCommand = require('./bang-command');
 const url = require('url');
-const needle = require('needle');
 const mime = require('mime-types');
-const fs = require('fs');
 const inspect = require('util').inspect;
-const tempfile = require('tempfile');
 const path = require('path');
+const { download } = require('./utils');
 
 class Base {
   initThirdPartyClient() {
@@ -57,7 +55,7 @@ class Base {
     throw new Error('override me');
   }
 
-  sendPictureMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _messageText, _imageFile, _matrixEvent) {
+  sendImageMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _messageText, _imageBuffer, _matrixEvent, _publicMatrixUrl) {
     throw new Error('override me');
   }
 
@@ -361,7 +359,7 @@ class Base {
    * Returns a promise
    */
   handleThirdPartyRoomImageMessage(thirdPartyRoomImageMessageData) {
-    const { info } = debug(this.handleThirdPartyRoomMessage.name);
+    const { info, warn } = debug(this.handleThirdPartyRoomMessage.name);
     info('handling third party room image message', thirdPartyRoomImageMessageData);
     let {
       roomId,
@@ -377,25 +375,27 @@ class Base {
 
     if (mimetype === undefined) {
       info("No content-type given by server, guessing based on file name.");
-      mimetype = mime.lookup(url);
+      mimetype = mime.lookup(require('url').parse(url).pathname);
     }
 
     return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((matrixRoomId) => {
       return this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl).then((client) => {
-        return this.downloadFileFromPublicWeb(url).then((localPath) => {
-          return client.uploadContent(fs.createReadStream(localPath), {
+        return download.toBuffer(url).then(buffer => {
+          client.uploadContent(buffer, {
             name: text,
             type: mimetype,
             rawResponse: false
-          }).then((res) => client.sendImageMessage(matrixRoomId, res.content_uri, {
-            mimetype: mimetype,
-            h: h,
-            w: w,
-            size: fs.statSync(localPath).size
-          }, this.tagMatrixMessage(text)), (e) => client.sendMessage(matrixRoomId, {
-            body: this.tagMatrixMessage(url),
-            msgtype: "m.text"
-          })).then(() =>fs.unlink(localPath));
+          }).then((res) => {
+            let opts = { mimetype, h, w, size: buffer.length };
+            return client.sendImageMessage(matrixRoomId, res.content_uri, opts, this.tagMatrixMessage(text));
+          }, (err) =>{
+            warn('upload error', err);
+            let opts = {
+              body: this.tagMatrixMessage(url),
+              msgtype: "m.text"
+            };
+            return client.sendMessage(matrixRoomId, opts);
+          });
         });
       });
     });
@@ -493,9 +493,8 @@ class Base {
       logger.info("picture message from riot", body, info);
 
       const imageUrl = this.puppet.getClient().mxcUrlToHttp(data.content.url);
-      const ext = mime.extension(info.mimetype);
-      return this.downloadFileFromPublicWeb(imageUrl, ext).then((localPath)=>{
-        return this.sendPictureMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, localPath, data, imageUrl);
+      return download.toBuffer(imageUrl).then((buffer) => {
+        return this.sendImageMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, buffer, data, imageUrl);
       });
     }
   }
@@ -510,27 +509,6 @@ class Base {
   }
   isTaggedMatrixMessage(text) {
     return this.deduplicationTagRegex.test(text);
-  }
-  /**
-   * Download a file from the web
-   *
-   * @param {string} webUrl any resource on the public web
-   * @param {string} optional file extension to use for tempfile, e.g. ".png"
-   * @returns {Promise} path to local file
-   */
-  downloadFileFromPublicWeb(webUrl, ext=null) {
-    const { info }  = debug(this.downloadFileFromPublicWeb.name);
-    return new Promise(function(resolve, reject) {
-      const filepath = tempfile(ext && ext[0] !== '.' ? '.'+ext : ext);
-      const destination = fs.createWriteStream(filepath);
-      info('downloading', webUrl);
-      const download = needle.get(webUrl).pipe(destination);
-      download.on('error', reject);
-      download.on('finish', ()=>{
-        info('downloaded file', filepath);
-        resolve(filepath);
-      });
-    });
   }
   /**
    * Sets the ghost avatar using a regular URL
@@ -556,18 +534,17 @@ class Base {
       } else {
         const ext = path.extname(avatarUrl);
         info('downloading avatar from public web', avatarUrl);
-        return this.downloadFileFromPublicWeb(avatarUrl, ext).then((localPath)=>{
-          return client.uploadContent(fs.createReadStream(localPath), {
+        return download.toBuffer(avatarUrl).then((buffer)=> {
+          let opts = {
             name: path.basename(avatarUrl),
             type: mime.contentType(ext),
             rawResponse: false
-          });
+          };
+          return client.uploadContent(buffer, opts);
         }).then((res)=>{
           const contentUri = res.content_uri;
           info('uploaded avatar and got back content uri', contentUri);
           return ghostIntent.setAvatarUrl(contentUri);
-        }).catch(err=>{
-          throw err;
         });
       }
     });
