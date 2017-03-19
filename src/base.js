@@ -386,12 +386,29 @@ class Base {
             type: mimetype,
             rawResponse: false
           }).then((res) => {
+            let msg;
+            if (senderId === undefined) {
+              // tag the message to know it was sent by the bridge
+              msg = this.tagMatrixMessage(text);
+            } else {
+              msg = text;
+            }
+
             let opts = { mimetype, h, w, size: buffer.length };
-            return client.sendImageMessage(matrixRoomId, res.content_uri, opts, this.tagMatrixMessage(text));
+            return client.sendImageMessage(matrixRoomId, res.content_uri, opts, msg);
           }, (err) =>{
             warn('upload error', err);
+
+            let msg;
+            if (senderId === undefined) {
+              // tag the message to know it was sent by the bridge
+              msg = this.tagMatrixMessage(url);
+            } else {
+              msg = url;
+            }
+
             let opts = {
-              body: this.tagMatrixMessage(url),
+              body: msg,
               msgtype: "m.text"
             };
             return client.sendMessage(matrixRoomId, opts);
@@ -431,8 +448,13 @@ class Base {
           }
         }
 
-        // tag the message to know it was sent by the bridge
-        const msg = this.tagMatrixMessage(text);
+        let msg;
+        if (senderId === undefined) {
+          // tag the message to know it was sent by the bridge
+          msg = this.tagMatrixMessage(text);
+        } else {
+          msg = text;
+        }
 
         if (html) {
           return client.sendMessage(matrixRoomId, {
