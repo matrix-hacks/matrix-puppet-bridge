@@ -345,11 +345,15 @@ class Base {
       const ghostIntent = this.getIntentFromThirdPartySenderId(senderId);
       return ghostIntent.join(roomId).then(() => {
         let promiseList = [];
-        if (senderName)
-          promiseList.push(() => ghostIntent.setDisplayName(senderName));
+        if (senderName) {
+          info("Set the display name to %s", senderName);
+          promiseList.push(ghostIntent.setDisplayName(senderName));
+        }
 
-        if (avatarUrl)
-          promiseList.push(() => this.setGhostAvatar(ghostIntent, avatarUrl));
+        if (avatarUrl) {
+          info("Set the avatar to %s", avatarUrl);
+          promiseList.push(this.setGhostAvatar(ghostIntent, avatarUrl));
+        }
 
         return Promise.all(promiseList).then(() => ghostIntent.getClient());
       }).then(() => ghostIntent.getClient());
