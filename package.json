@@ -1,6 +1,6 @@
 {
   "name": "matrix-puppet-bridge",
-  "version": "1.11.0",
+  "version": "1.11.1",
   "description": "facilitates writing a certain kind of matrix bridge",
   "main": "index.js",
   "scripts": {
