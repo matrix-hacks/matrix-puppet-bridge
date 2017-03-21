@@ -12,12 +12,25 @@ const readConfigFile = (jsonFile) => {
   });
 };
 
+/**
+ * Puppet class
+ */
 class Puppet {
+  /**
+   * Constructs a Puppet
+   *
+   * @param {string} jsonFile path to JSON config file
+   */
   constructor(jsonFile) {
     this.jsonFile = jsonFile;
     this.id = null;
     this.client = null;
   }
+  /**
+   * Reads the config file, creates a matrix client, connects, and waits for sync
+   *
+   * @returns {Promise} Returns a promise resolving the MatrixClient
+   */
   startClient() {
     return readConfigFile(this.jsonFile).then(config => {
       this.id = config.puppet.id;
@@ -29,7 +42,7 @@ class Puppet {
     }).then(_matrixClient => {
       this.client = _matrixClient;
       this.client.startClient();
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve, _reject) => {
         this.matrixRoomMembers = {};
         this.client.on("RoomState.members", (event, state, _member) => {
           this.matrixRoomMembers[state.roomId] = Object.keys(state.members);
@@ -43,12 +56,28 @@ class Puppet {
       });
     });
   }
+  /**
+   * Get the list of matrix room members
+   *
+   * @param {string} roomId matrix room id
+   * @returns {Array} List of room members
+   */
   getMatrixRoomMembers(roomId) {
     return this.matrixRoomMembers[roomId] || [];
   }
+  /**
+   * Returns the MatrixClient
+   *
+   * @returns {MatrixClient} an instance of MatrixClient
+   */
   getClient() {
     return this.client;
   }
+  /**
+   * Prompts user for credentials and updates the puppet section of the config
+   *
+   * @returns {Promise}
+   */
   associate() {
     return readConfigFile(this.jsonFile).then(config => {
       console.log([
