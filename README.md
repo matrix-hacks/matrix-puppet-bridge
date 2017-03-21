@@ -16,13 +16,15 @@ These bridges have been built using matrix-puppet-bridge:
 
 ## FAQ
 
-### Q: Any way to disable appending [m] to messages?
+### Q: Why am I seeing duplicate messages?
 
-Yes. Append the following to config.json right before the last closing brace.
+We use a non-printable suffix to "tag" messages that go over the bridged network and when the message is seen on the return trip, we know to ignore it and not forward it again. This tag may be getting stripped on your network.
+
+Try using a printable tag, which is unlikely to be stripped, by editing config.json and adding:
 
 ```json
-"deduplicationTag" : " \ufeff",
-"deduplicationTagPattern" : " \\ufeff$"
+"deduplicationTag" : " [m]",
+"deduplicationTagPattern" : " \\[m\\]"
 ```
 
 Let us know if this doesn't work on a particular protocol!
