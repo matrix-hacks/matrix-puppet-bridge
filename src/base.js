@@ -54,7 +54,7 @@ class Base {
     throw new Error('override me');
   }
 
-  sendImageMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _messageText, _imageBuffer, _matrixEvent, _publicMatrixUrl) {
+  sendImageMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data) {
     throw new Error('override me');
   }
 
@@ -510,11 +510,15 @@ class Base {
       }
       return this.sendMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, data);
     } else if (msgtype === 'm.image') {
-      logger.info("picture message from riot", body, info);
+      logger.info("picture message from riot");
 
-      const imageUrl = this.puppet.getClient().mxcUrlToHttp(data.content.url);
-      return download.getBuffer(imageUrl).then((buffer) => {
-        return this.sendImageMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, buffer, data, imageUrl);
+      let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
+      return this.sendImageMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
+        url, text: this.tagMatrixMessage(body),
+        mimetype: data.content.info.mimetype,
+        width: data.content.info.w,
+        height: data.content.info.h,
+        size: data.content.info.size,
       });
     }
   }
