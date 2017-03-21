@@ -558,12 +558,11 @@ class Base {
         info('refusing to overwrite existing avatar');
         return null;
       } else {
-        const ext = path.extname(avatarUrl);
         info('downloading avatar from public web', avatarUrl);
-        return download.toBuffer(avatarUrl).then((buffer)=> {
+        return download.toBufferAndHeaders(avatarUrl).then(({buffer, headers})=> {
           let opts = {
             name: path.basename(avatarUrl),
-            type: mime.contentType(ext),
+            type: headers['content-type'] || mime.contentType(path.extname(avatarUrl)),
             rawResponse: false
           };
           return client.uploadContent(buffer, opts);
