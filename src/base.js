@@ -2,8 +2,7 @@ const debug = require('./debug')('Base');
 const Promise = require('bluebird');
 const { Bridge, RemoteUser } = require('matrix-appservice-bridge');
 const bangCommand = require('./bang-command');
-const url = require('url');
-const mime = require('mime-types');
+const urlParse = require('url').parse;
 const inspect = require('util').inspect;
 const path = require('path');
 const { download } = require('./utils');
@@ -81,7 +80,7 @@ class Base {
     this.config = config;
     this.puppet = puppet;
     this.domain = config.bridge.domain;
-    this.homeserver = url.parse(config.bridge.homeserverUrl);
+    this.homeserver = urlParse(config.bridge.homeserverUrl);
     this.deduplicationTag = this.config.deduplicationTag || this.defaultDeduplicationTag();
     this.deduplicationTagPattern = this.config.deduplicationTagPattern || this.defaultDeduplicationTagPattern();
     this.deduplicationTagRegex = new RegExp(this.deduplicationTagPattern);
@@ -377,17 +376,12 @@ class Base {
       mimetype
     } = thirdPartyRoomImageMessageData;
 
-    if (mimetype === undefined) {
-      info("No content-type given by server, guessing based on file name.");
-      mimetype = mime.lookup(require('url').parse(url).pathname);
-    }
-
     return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((matrixRoomId) => {
       return this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl).then((client) => {
-        return download.toBuffer(url).then(buffer => {
+        return download.getBufferAndType(url).then(({buffer,type}) => {
           client.uploadContent(buffer, {
             name: text,
-            type: mimetype,
+            type: mimetype || type,
             rawResponse: false
           }).then((res) => {
             let msg;
@@ -519,7 +513,7 @@ class Base {
       logger.info("picture message from riot", body, info);
 
       const imageUrl = this.puppet.getClient().mxcUrlToHttp(data.content.url);
-      return download.toBuffer(imageUrl).then((buffer) => {
+      return download.getBuffer(imageUrl).then((buffer) => {
         return this.sendImageMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, buffer, data, imageUrl);
       });
     }
@@ -559,10 +553,10 @@ class Base {
         return null;
       } else {
         info('downloading avatar from public web', avatarUrl);
-        return download.toBufferAndHeaders(avatarUrl).then(({buffer, headers})=> {
+        return download.getBufferAndType(avatarUrl).then(({buffer, type})=> {
           let opts = {
             name: path.basename(avatarUrl),
-            type: headers['content-type'] || mime.contentType(path.extname(avatarUrl)),
+            type,
             rawResponse: false
           };
           return client.uploadContent(buffer, opts);
