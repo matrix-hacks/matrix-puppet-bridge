@@ -523,10 +523,10 @@ class Base {
     }
   }
   defaultDeduplicationTag() {
-    return " [m]";
+    return " \ufeff";
   }
   defaultDeduplicationTagPattern() {
-    return " \\[m\\]";
+    return " \\ufeff$";
   }
   tagMatrixMessage(text) {
     return text+this.deduplicationTag;
