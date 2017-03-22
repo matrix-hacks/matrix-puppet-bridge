@@ -16,19 +16,15 @@ These bridges have been built using matrix-puppet-bridge:
 
 ## FAQ
 
-### Q: Why am I seeing duplicate messages?
+### Q: I can receive messages, I can also see messages sent by the third party client in Matrix but I cannot send messages from Matrix. Nothing appears to show up in the logs when I send a message in Matrix and nothing is actually sent. What's going on?
 
-We use a non-printable suffix to "tag" messages that go over the bridged network and when the message is seen on the return trip, we know to ignore it and not forward it again. This tag may be getting stripped on your network.
+This is symptomatic of a homeserver that is unable to reach the bridge. If you curl the bridge URL in the yaml file that you have referenced in synapse's homeserver.yaml, does it 200 OK ? Most likely this is misconfigured. If you still have this issue ask us in [#matrix-puppet-bridge:matrix.org](https://riot.im/app/#/room/#matrix-puppet-bridge:matrix.org).
 
-Try using a printable tag, which is unlikely to be stripped, by editing config.json and adding:
+### Q: My access token has changed. How can I quickly update my access token on the bridge?
 
-```json
-"deduplicationTag" : " [m]",
-"deduplicationTagPattern" : " \\[m\\]"
-```
+Run this in your bridge directory:
 
-Let us know if this doesn't work on a particular protocol!
-For more information, see [this discussion](https://github.com/matrix-hacks/matrix-puppet-facebook/issues/6).
+`node -e "new (require('matrix-puppet-bridge').Puppet)('config.json').associate()"`
 
 ### Q: Is this made to handle several facebook/hangouts/slack users within one bridge? In other words, can I use this for "mass hosting" of many facebook/hangouts/slack with one matrix homeserver?
 
@@ -98,11 +94,19 @@ class App extends MatrixPuppetBridgeBase {
 }
 ```
 
-### Q: My access token has changed. How can I update my access token on the bridge?
+### Q: Why am I seeing duplicate messages?
 
-Run this in your bridge directory:
+We use a non-printable suffix to "tag" messages that go over the bridged network and when the message is seen on the return trip, we know to ignore it and not forward it again. This tag may be getting stripped on your network.
 
-`node -e "new (require('matrix-puppet-bridge').Puppet)('config.json').associate()"`
+Try using a printable tag, which is unlikely to be stripped, by editing config.json and adding:
+
+```json
+"deduplicationTag" : " [m]",
+"deduplicationTagPattern" : " \\[m\\]"
+```
+
+Let us know if this doesn't work on a particular protocol!
+For more information, see [this discussion](https://github.com/matrix-hacks/matrix-puppet-facebook/issues/6).
 
 ### Q: Where can I ask questions?
 
