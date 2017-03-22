@@ -536,21 +536,8 @@ class Base {
       }
 
       info("this message was not sent by me");
-      return this.getIntentFromThirdPartySenderId(senderId).then((ghostIntent) => {
-        return ghostIntent.join(roomId).then(() => {
-          let promiseList = [];
-          if (senderName) {
-            info("Set the display name to %s", senderName);
-            promiseList.push(ghostIntent.setDisplayName(senderName));
-          }
-
-          if (avatarUrl) {
-            info("Set the avatar to %s", avatarUrl);
-            promiseList.push(this.setGhostAvatar(ghostIntent, avatarUrl));
-          }
-
-          return Promise.all(promiseList).then(() => ghostIntent.getClient());
-        }).then(() => ghostIntent.getClient());
+      return this.getIntentFromThirdPartySenderId(senderId).then((ghostIntent, senderName, avatarUrl) => {
+        return ghostIntent.join(roomId).then(() => ghostIntent.getClient());
       });
     }
   }
