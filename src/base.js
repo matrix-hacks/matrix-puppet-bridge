@@ -291,28 +291,28 @@ class Base {
   }
 
   /**
-   * Make a list of third party user join the status room
+   * Make a list of third party users join the status room
    *
-   * @param {Object[]} thirdPartyUsers The list of third party users.
-   * @param {string} thirdPartyUsers[].name The third party user name
-   * @param {string} thirdPartyUsers[].userId The third party user ID
-   * @param {string} thirdPartyUsers[].avatarUrl The third party user avatar URL
+   * @param {Object[]} users The list of third party users
+   * @param {string} users[].name The third party user name
+   * @param {string} users[].userId The third party user ID
+   * @param {string} users[].avatarUrl The third party user avatar URL
    *
    * @returns {Promise} Promise resolving if all joins success
    */
-  joinThirdPartyUsersToStatusRoom(thirdPartyUsers) {
+  joinThirdPartyUsersToStatusRoom(users) {
     const { info } = debug(this.getStatusRoomId.name);
 
-    info("Join %s users to the status room", thirdPartyUsers.length);
+    info("Join %s users to the status room", users.length);
     return this.getStatusRoomId().then(statusRoomId => {
-      return Promise.each(thirdPartyUsers, (user) => {
+      return Promise.each(users, (user) => {
         return this.getIntentFromThirdPartySenderId(user.userId, user.name, user.avatarUrl)
         .then((ghostIntent) => {
           return ghostIntent.join(statusRoomId)
         });
       });
     }).then(() => {
-      return this.sendStatusMsg({fixedWidthOutput: false}, "Contact list synced");
+      info("Contact list synced");
     });
   }
 
@@ -513,7 +513,15 @@ class Base {
   }
 
   /**
-   * Returns a promise
+   * Get the client object for a user, either third party user or us.
+   *
+   * @param {string} roomId The room the user must join ID
+   * @param {string} senderId The user's ID
+   * @param {string} senderName The user's name
+   * @param {string} avatarUrl A resource on the public web
+   * @param {boolean} doNoTryToGetRemoteUsersStoreData Private parameter to prevent infinite loop
+   *
+   * @returns {Promise} A Promise resolving to the user's client object
    */
   getUserClient(roomId, senderId, senderName, avatarUrl, doNotTryToGetRemoteUserStoreData) {
     const { info } = debug(this.getUserClient.name);
@@ -537,10 +545,14 @@ class Base {
 
       info("this message was not sent by me");
       return this.getIntentFromThirdPartySenderId(senderId).then((ghostIntent, senderName, avatarUrl) => {
-        return ghostIntent.join(roomId).then(() => ghostIntent.getClient());
+        return this.getStatusRoomId()
+        .then(statusRoomId => ghostIntent.join(statusRoomId))
+        .then(() => ghostIntent.join(roomId))
+        .then(() => ghostIntent.getClient());
       });
     }
   }
+
   /**
    * Returns a promise
    */
