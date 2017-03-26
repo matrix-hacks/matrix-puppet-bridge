@@ -243,6 +243,79 @@ class Base {
       }
     }));
   }
+
+  /**
+   * Async call to get the status room ID
+   *
+   * @params {_roomAliasLocalPart} Optional, the room alias local part
+   * @returns {Promise->string} Promise resolving the room ID
+   */
+  getStatusRoomId(_roomAliasLocalPart) {
+    const { info } = debug(this.getStatusRoomId.name);
+    const roomAliasLocalPart = _roomAliasLocalPart || this.getServicePrefix()+"_"+this.getStatusRoomPostfix();
+    const roomAlias = "#"+roomAliasLocalPart+":"+this.domain;
+    const puppetClient = this.puppet.getClient();
+
+    info('looking up', roomAlias);
+    return puppetClient.getRoomIdForAlias(roomAlias).then(({room_id}) => {
+      info("found matrix room via alias. room_id:", room_id);
+      return room_id;
+    }, (_err) => {
+      const name = this.getServiceName() + " Protocol";
+      const topic = this.getServiceName() + " Protocol Status Messages";
+      info("creating status room !!!!", ">>>>"+roomAliasLocalPart+"<<<<", name, topic);
+      return puppetClient.createRoom({
+        name, topic, room_alias_name: roomAliasLocalPart
+      }).then(({room_id}) => {
+        info("status room created", room_id, roomAliasLocalPart);
+        return roomId;
+      });
+    }).then(matrixRoomId => {
+      info("making puppet join room", matrixRoomId);
+      return puppetClient.joinRoom(matrixRoomId).then(() => {
+        info("returning room id after join room attempt", matrixRoomId);
+        return matrixRoomId;
+      }, (err) => {
+        if (err.message === 'No known servers') {
+          warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
+          return puppetClient.deleteAlias(roomAlias).then(()=>{
+            warn('deleted alias... trying again to get or create room.');
+            return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId)
+          })
+        } else {
+          warn("ignoring error from puppet join room: ", err.message);
+          return matrixRoomId;
+        }
+      });
+    });
+  }
+
+  /**
+   * Make a list of third party users join the status room
+   *
+   * @param {Object[]} users The list of third party users
+   * @param {string} users[].name The third party user name
+   * @param {string} users[].userId The third party user ID
+   * @param {string} users[].avatarUrl The third party user avatar URL
+   *
+   * @returns {Promise} Promise resolving if all joins success
+   */
+  joinThirdPartyUsersToStatusRoom(users) {
+    const { info } = debug(this.getStatusRoomId.name);
+
+    info("Join %s users to the status room", users.length);
+    return this.getStatusRoomId().then(statusRoomId => {
+      return Promise.each(users, (user) => {
+        return this.getIntentFromThirdPartySenderId(user.userId, user.name, user.avatarUrl)
+        .then((ghostIntent) => {
+          return ghostIntent.join(statusRoomId)
+        });
+      });
+    }).then(() => {
+      info("Contact list synced");
+    });
+  }
+
   /**
    * Send a message to the status room
    *
@@ -270,44 +343,7 @@ class Base {
     }, '');
 
     const { warn, info } = debug(this.sendStatusMsg.name);
-    const roomAliasLocalPart = options.roomAliasLocalPart || this.getServicePrefix()+"_"+this.getStatusRoomPostfix();
-    const roomAlias = "#"+roomAliasLocalPart+":"+this.domain;
-
-    const puppetClient = this.puppet.getClient();
-
-    info('looking up', roomAlias);
-    info('gonna send', msgText);
-    return puppetClient.getRoomIdForAlias(roomAlias).then(({room_id}) => {
-      info("found matrix room via alias. room_id:", room_id);
-      return room_id;
-    }, (_err) => {
-      const name = this.getServiceName() + " Protocol";
-      const topic = this.getServiceName() + " Protocol Status Messages";
-      info("creating status room !!!!", ">>>>"+roomAliasLocalPart+"<<<<", name, topic);
-      return puppetClient.createRoom({
-        name, topic, room_alias_name: roomAliasLocalPart
-      }).then(({room_id}) => {
-        info("room created", room_id, roomAliasLocalPart);
-        return room_id;
-      });
-    }).then(matrixRoomId => {
-      info("making puppet join room", matrixRoomId);
-      return puppetClient.joinRoom(matrixRoomId).then(()=>{
-        info("returning room id after join room attempt", matrixRoomId);
-        return matrixRoomId;
-      }, (err) => {
-        if ( err.message === 'No known servers' ) {
-          warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
-          return puppetClient.deleteAlias(roomAlias).then(()=>{
-            warn('deleted alias... trying again to get or create room.');
-            return this.getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId)
-          })
-        } else {
-          warn("ignoring error from puppet join room: ", err.message);
-          return matrixRoomId;
-        }
-      });
-    }).then(statusRoomId => {
+    return this.getStatusRoomId(options.roomAliasLocalPart).then(statusRoomId => {
       var botIntent = this.bridge.getIntent();
       if (botIntent === null) {
         warn('cannot send a status message before the bridge is ready');
@@ -372,12 +408,33 @@ class Base {
   getRoomAliasLocalPartFromThirdPartyRoomId(id) {
     return this.getServicePrefix()+"_"+id;
   }
-  getIntentFromThirdPartySenderId(senderId) {
-    return this.bridge.getIntent(this.getGhostUserFromThirdPartySenderId(senderId));
+
+  /**
+   * Get a intent for a third party user, and if provided set its display name and its avatar
+   *
+   * @param {string} userId The third party user ID
+   * @param {string} name The third party user name
+   * @param {string} avatarUrl The third party user avatar URL
+   *
+   * @returns {Promise->Intent} A promise resolving to an intent
+   */
+  getIntentFromThirdPartySenderId(userId, name, avatarUrl) {
+    const ghostIntent = this.bridge.getIntent(this.getGhostUserFromThirdPartySenderId(userId));
+
+    let promiseList = [];
+    if (name)
+      promiseList.push(ghostIntent.setDisplayName(name));
+
+    if (avatarUrl)
+      promiseList.push(this.setGhostAvatar(ghostIntent, avatarUrl));
+
+    return Promise.all(promiseList).then(() => ghostIntent);
   }
+
   getIntentFromApplicationServerBot() {
     return this.bridge.getIntent();
   }
+
   /**
    * Returns a Promise resolving {senderName}
    *
@@ -456,7 +513,15 @@ class Base {
   }
 
   /**
-   * Returns a promise
+   * Get the client object for a user, either third party user or us.
+   *
+   * @param {string} roomId The room the user must join ID
+   * @param {string} senderId The user's ID
+   * @param {string} senderName The user's name
+   * @param {string} avatarUrl A resource on the public web
+   * @param {boolean} doNoTryToGetRemoteUsersStoreData Private parameter to prevent infinite loop
+   *
+   * @returns {Promise} A Promise resolving to the user's client object
    */
   getUserClient(roomId, senderId, senderName, avatarUrl, doNotTryToGetRemoteUserStoreData) {
     const { info } = debug(this.getUserClient.name);
@@ -479,23 +544,15 @@ class Base {
       }
 
       info("this message was not sent by me");
-      const ghostIntent = this.getIntentFromThirdPartySenderId(senderId);
-      return ghostIntent.join(roomId).then(() => {
-        let promiseList = [];
-        if (senderName) {
-          info("Set the display name to %s", senderName);
-          promiseList.push(ghostIntent.setDisplayName(senderName));
-        }
-
-        if (avatarUrl) {
-          info("Set the avatar to %s", avatarUrl);
-          promiseList.push(this.setGhostAvatar(ghostIntent, avatarUrl));
-        }
-
-        return Promise.all(promiseList).then(() => ghostIntent.getClient());
-      }).then(() => ghostIntent.getClient());
+      return this.getIntentFromThirdPartySenderId(senderId).then((ghostIntent, senderName, avatarUrl) => {
+        return this.getStatusRoomId()
+        .then(statusRoomId => ghostIntent.join(statusRoomId))
+        .then(() => ghostIntent.join(roomId))
+        .then(() => ghostIntent.getClient());
+      });
     }
   }
+
   /**
    * Returns a promise
    */
@@ -608,6 +665,7 @@ class Base {
       });
     });
   }
+
   handleMatrixEvent(req, _context) {
     const { info, warn } = debug(this.handleMatrixEvent.name);
     const data = req.getData();
