@@ -607,7 +607,7 @@ class Base {
             });
           };
         } else {
-          promise = Promise.rejects(new Error('missing url or path'));
+          promise = Promise.reject(new Error('missing url or path'));
         }
 
         const tag = autoTagger(senderId, this);
@@ -705,7 +705,7 @@ class Base {
     const isStatusRoom = thirdPartyRoomId === this.getStatusRoomPostfix();
 
     if (!thirdPartyRoomId) {
-      promise = Promise.rejects(new Error('could not determine third party room id!'));
+      promise = Promise.reject(new Error('could not determine third party room id!'));
     } else if (isStatusRoom) {
       logger.info("ignoring incoming message to status room");
 
@@ -736,7 +736,7 @@ class Base {
           size: data.content.info.size,
         }, data);
       } else {
-        promise = Promise.rejects(new Error('dont know how to handle this msgtype', msgtype));
+        promise = Promise.reject(new Error('dont know how to handle this msgtype', msgtype));
       }
     }
 
