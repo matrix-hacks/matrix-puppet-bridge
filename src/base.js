@@ -5,7 +5,8 @@ const bangCommand = require('./bang-command');
 const urlParse = require('url').parse;
 const inspect = require('util').inspect;
 const path = require('path');
-const { download } = require('./utils');
+const { download, autoTagger } = require('./utils');
+const fs = require('fs');
 
 /**
  * Extend your app from this class to get started.
@@ -119,7 +120,9 @@ class Base {
    * @returns {string} A friendly name for the bridged protocol.
    */
   getServiceName() {
-    throw new Error("override me");
+    const { warn } = debug();
+    warn('getServiceName is not defined, falling back to getServicePrefix');
+    return this.getServicePrefix();
   }
 
   /**
@@ -140,7 +143,7 @@ class Base {
    * @returns {Promise}
    */
   sendMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _messageText, _matrixEvent) {
-    throw new Error('override me');
+    return Promise.reject(new Error('please implement sendMessageAsPuppetToThirdPartyRoomWithId'));
   }
 
   /**
@@ -148,10 +151,11 @@ class Base {
    *
    * @param {string} _thirdPartyRoomId
    * @param {object} _messageData
+   * @param {object} _matrixEvent
    * @returns {Promise}
    */
-  sendImageMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data) {
-    throw new Error('override me');
+  sendImageMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent) {
+    return Promise.reject(new Error('please implement sendImageMessageAsPuppetToThirdPartyRoomWithId'));
   }
 
   /**
@@ -248,10 +252,10 @@ class Base {
    * Async call to get the status room ID
    *
    * @params {_roomAliasLocalPart} Optional, the room alias local part
-   * @returns {Promise->string} Promise resolving the room ID
+   * @returns {Promise} Promise resolving the Matrix room ID of the status room
    */
   getStatusRoomId(_roomAliasLocalPart) {
-    const { info } = debug(this.getStatusRoomId.name);
+    const { info, warn } = debug(this.getStatusRoomId.name);
     const roomAliasLocalPart = _roomAliasLocalPart || this.getServicePrefix()+"_"+this.getStatusRoomPostfix();
     const roomAlias = "#"+roomAliasLocalPart+":"+this.domain;
     const puppetClient = this.puppet.getClient();
@@ -268,7 +272,7 @@ class Base {
         name, topic, room_alias_name: roomAliasLocalPart
       }).then(({room_id}) => {
         info("status room created", room_id, roomAliasLocalPart);
-        return roomId;
+        return room_id;
       });
     }).then(matrixRoomId => {
       info("making puppet join room", matrixRoomId);
@@ -280,8 +284,8 @@ class Base {
           warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
           return puppetClient.deleteAlias(roomAlias).then(()=>{
             warn('deleted alias... trying again to get or create room.');
-            return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId)
-          })
+            return this.getStatusRoomId(_roomAliasLocalPart);
+          });
         } else {
           warn("ignoring error from puppet join room: ", err.message);
           return matrixRoomId;
@@ -308,7 +312,7 @@ class Base {
       return Promise.each(users, (user) => {
         return this.getIntentFromThirdPartySenderId(user.userId, user.name, user.avatarUrl)
         .then((ghostIntent) => {
-          return ghostIntent.join(statusRoomId)
+          return ghostIntent.join(statusRoomId);
         });
       });
     }).then(() => {
@@ -353,7 +357,7 @@ class Base {
 
       promiseList.push(() => {
         info("joining protocol bot to room >>>", statusRoomId, "<<<");
-        botIntent.join(statusRoomId)
+        botIntent.join(statusRoomId);
       });
 
       // AS Bots don't have display names? Weird...
@@ -361,20 +365,21 @@ class Base {
       //promiseList.push(() => botIntent.setDisplayName(this.getServiceName() + " Bot"));
 
       promiseList.push(() => {
+        let txt = this.tagMatrixMessage(msgText); // <-- Important! Or we will cause message looping...
         if(options.fixedWidthOutput)
         {
           return botIntent.sendMessage(statusRoomId, {
-            body: msgText,
-            formatted_body: "<pre><code>" + msgText + "</code></pre>",
+            body: txt,
+            formatted_body: "<pre><code>" + txt + "</code></pre>",
             format: "org.matrix.custom.html",
-            msgtype: "m.notice" // <-- Important! Or we will cause message looping...
+            msgtype: "m.notice"
           });
         }
         else
         {
           return botIntent.sendMessage(statusRoomId, {
-            body: msgText,
-            msgtype: "m.notice" // <-- Important! Or we will cause message looping...
+            body: txt,
+            msgtype: "m.notice"
           });
         }
       });
@@ -416,7 +421,7 @@ class Base {
    * @param {string} name The third party user name
    * @param {string} avatarUrl The third party user avatar URL
    *
-   * @returns {Promise->Intent} A promise resolving to an intent
+   * @returns {Promise} A promise resolving to an Intent
    */
   getIntentFromThirdPartySenderId(userId, name, avatarUrl) {
     const ghostIntent = this.bridge.getIntent(this.getGhostUserFromThirdPartySenderId(userId));
@@ -442,7 +447,7 @@ class Base {
    * provide a senderName when invoking handleThirdPartyRoomMessage
    *
    * @param {string} thirdPartyUserId
-   * @returns {Promise}
+   * @returns {Promise} A promise resolving to a {RemoteUser}
    */
   getOrInitRemoteUserStoreDataFromThirdPartyUserId(thirdPartyUserId) {
     const { info } = debug(this.getOrInitRemoteUserStoreDataFromThirdPartyUserId.name);
@@ -496,14 +501,14 @@ class Base {
       info("making puppet join room", matrixRoomId);
       return puppetClient.joinRoom(matrixRoomId).then(()=>{
         info("returning room id after join room attempt", matrixRoomId);
-        return matrixRoomId
+        return matrixRoomId;
       }, (err) => {
         if ( err.message === 'No known servers' ) {
           warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
           return puppetClient.deleteAlias(roomAlias).then(()=>{
             warn('deleted alias... trying again to get or create room.');
-            return this.getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId)
-          })
+            return this.getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId);
+          });
         } else {
           warn("ignoring error from puppet join room: ", err.message);
           return matrixRoomId;
@@ -544,12 +549,13 @@ class Base {
       }
 
       info("this message was not sent by me");
-      return this.getIntentFromThirdPartySenderId(senderId).then((ghostIntent, senderName, avatarUrl) => {
-        return this.getStatusRoomId()
-        .then(statusRoomId => ghostIntent.join(statusRoomId))
-        .then(() => ghostIntent.join(roomId))
-        .then(() => ghostIntent.getClient());
-      });
+      return this.getIntentFromThirdPartySenderId(senderId, senderName, avatarUrl)
+        .then((ghostIntent) => {
+          return this.getStatusRoomId()
+            .then(statusRoomId => ghostIntent.join(statusRoomId))
+            .then(() => ghostIntent.join(roomId))
+            .then(() => ghostIntent.getClient());
+        });
     }
   }
 
@@ -565,7 +571,7 @@ class Base {
       senderId,
       avatarUrl,
       text,
-      url,
+      url, path, // either one is fine
       h,
       w,
       mimetype
@@ -573,39 +579,51 @@ class Base {
 
     return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((matrixRoomId) => {
       return this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl).then((client) => {
-        return download.getBufferAndType(url).then(({buffer,type}) => {
-          client.uploadContent(buffer, {
+
+        let upload = (buffer, opts)=>{
+          return client.uploadContent(buffer, Object.assign({
             name: text,
-            type: mimetype || type,
+            type: mimetype,
             rawResponse: false
-          }).then((res) => {
-            let msg;
-            if (senderId === undefined) {
-              // tag the message to know it was sent by the bridge
-              msg = this.tagMatrixMessage(text);
-            } else {
-              msg = text;
-            }
-
-            let opts = { mimetype, h, w, size: buffer.length };
-            return client.sendImageMessage(matrixRoomId, res.content_uri, opts, msg);
-          }, (err) =>{
-            warn('upload error', err);
-
-            let msg;
-            if (senderId === undefined) {
-              // tag the message to know it was sent by the bridge
-              msg = this.tagMatrixMessage(url);
-            } else {
-              msg = url;
-            }
-
-            let opts = {
-              body: msg,
-              msgtype: "m.text"
+          }, opts || {})).then((res)=>{
+            return {
+              content_uri: res.content_uri,
+              size: buffer.length
             };
-            return client.sendMessage(matrixRoomId, opts);
           });
+        };
+
+        let promise;
+        if ( url ) {
+          promise = ()=> {
+            return download.getBufferAndType(url).then(({buffer,type}) => {
+              return upload(buffer, { type: mimetype || type });
+            });
+          };
+        } else if ( path ) {
+          promise = () => {
+            return Promise.promisify(fs.readFile)(path).then(buffer => {
+              return upload(buffer);
+            });
+          };
+        } else {
+          promise = Promise.rejects(new Error('missing url or path'));
+        }
+
+        const tag = autoTagger(senderId, this);
+
+        promise().then(({ content_uri, size }) => {
+          let msg = tag(text);
+          let opts = { mimetype, h, w, size };
+          return client.sendImageMessage(matrixRoomId, content_uri, opts, msg);
+        }, (err) =>{
+          warn('upload error', err);
+
+          let opts = {
+            body: tag(url || path || text),
+            msgtype: "m.text"
+          };
+          return client.sendMessage(matrixRoomId, opts);
         });
       });
     });
@@ -641,28 +659,24 @@ class Base {
           }
         }
 
-        let msg;
-        if (senderId === undefined) {
-          // tag the message to know it was sent by the bridge
-          msg = this.tagMatrixMessage(text);
-        } else {
-          msg = text;
-        }
+        let tag = autoTagger(senderId, this);
 
         if (html) {
           return client.sendMessage(matrixRoomId, {
-            body: msg,
+            body: tag(text),
             formatted_body: html,
             format: "org.matrix.custom.html",
             msgtype: "m.text"
           });
         } else {
           return client.sendMessage(matrixRoomId, {
-            body: msg,
+            body: tag(text),
             msgtype: "m.text"
           });
         }
       });
+    }).catch(err=>{
+      this.sendStatusMsg({}, 'Error in '+this.handleThirdPartyRoomMessage.name, err, thirdPartyRoomMessageData);
     });
   }
 
@@ -678,45 +692,57 @@ class Base {
   }
   handleMatrixMessageEvent(data) {
     const logger = debug(this.handleMatrixMessageEvent.name);
-    const { room_id, content: { body, msgtype, info} } = data;
+    const { room_id, content: { body, msgtype } } = data;
+
+    let promise, msg;
+
     if (this.isTaggedMatrixMessage(body)) {
       logger.info("ignoring tagged message, it was sent by the bridge");
       return;
     }
 
     const thirdPartyRoomId = this.getThirdPartyRoomIdFromMatrixRoomId(room_id);
+    const isStatusRoom = thirdPartyRoomId === this.getStatusRoomPostfix();
+
     if (!thirdPartyRoomId) {
-      throw new Error('could not determine third party room id!!'); // XXX fire notice
-    }
-
-    // We may wish to process bang commands here at some point,
-    // but for now let's just drop these.
-    if (thirdPartyRoomId == this.getStatusRoomPostfix())
-    {
+      promise = Promise.rejects(new Error('could not determine third party room id!'));
+    } else if (isStatusRoom) {
       logger.info("ignoring incoming message to status room");
-      return;
-    }
 
-    const msg = this.tagMatrixMessage(body);
+      msg = this.tagMatrixMessage("Commands are currently ignored here");
 
-    if (msgtype === 'm.text') {
-      if (this.handleMatrixUserBangCommand) {
-        const bc = bangCommand(body);
-        if (bc) return this.handleMatrixUserBangCommand(bc, data);
+      // We may wish to process bang commands here at some point,
+      // but for now let's just send a message back
+      promise = () => this.sendStatusMsg({ fixedWidthOutput: false }, msg);
+
+    } else {
+      msg = this.tagMatrixMessage(body);
+
+      if (msgtype === 'm.text') {
+        if (this.handleMatrixUserBangCommand) {
+          const bc = bangCommand(body);
+          if (bc) return this.handleMatrixUserBangCommand(bc, data);
+        }
+        promise = () => this.sendMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, data);
+      } else if (msgtype === 'm.image') {
+        logger.info("picture message from riot");
+
+        let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
+        promise = () => this.sendImageMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
+          url, text: this.tagMatrixMessage(body),
+          mimetype: data.content.info.mimetype,
+          width: data.content.info.w,
+          height: data.content.info.h,
+          size: data.content.info.size,
+        }, data);
+      } else {
+        promise = Promise.rejects(new Error('dont know how to handle this msgtype', msgtype));
       }
-      return this.sendMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, data);
-    } else if (msgtype === 'm.image') {
-      logger.info("picture message from riot");
-
-      let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
-      return this.sendImageMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
-        url, text: this.tagMatrixMessage(body),
-        mimetype: data.content.info.mimetype,
-        width: data.content.info.w,
-        height: data.content.info.h,
-        size: data.content.info.size,
-      });
     }
+
+    return promise().catch(err=>{
+      this.sendStatusMsg({}, 'Error in '+this.handleMatrixEvent.name, err, data);
+    });
   }
   defaultDeduplicationTag() {
     return " \ufeff";

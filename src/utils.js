@@ -15,7 +15,10 @@ const downloadGetBuffer = url => {
 
 const downloadGetBufferAndHeaders = url => {
   return new Promise((resolve, reject) => {
-    let headers, stream = downloadGetStream(url);
+    let headers = {
+      'content-type': 'application/octet-stream'
+    };
+    let stream = downloadGetStream(url);
     stream.on('header', (_s, _h) => headers = _h);
     stream.pipe(concatStream((buffer)=>{
       resolve({ buffer, headers });
@@ -35,13 +38,38 @@ const downloadGetBufferAndType = url => {
   });
 };
 
+const fs = require('fs');
+const tmp = require('tmp');
+
+const downloadGetTempfile = url  => {
+  return downloadGetBufferAndType(url).then(({ buffer, type}) => {
+    const ext = mime.extension(type);
+    const tmpfile = tmp.fileSync({ postfix: '.'+ext });
+    fs.writeFileSync(tmpfile.name, buffer);
+    return { path: tmpfile.name, remove: tmpfile.removeCallback };
+  });
+};
+
+const autoTagger = (senderId, self) => (text='') => {
+  let out;
+  if (senderId === undefined) {
+    // tag the message to know it was sent by the bridge
+    out = self.tagMatrixMessage(text);
+  } else {
+    out = text;
+  }
+  return out;
+};
+
 module.exports = {
   download: {
     getStream: downloadGetStream,
     getBuffer: downloadGetBuffer,
     getBufferAndHeaders: downloadGetBufferAndHeaders,
     getBufferAndType: downloadGetBufferAndType,
-  }
+    getTempfile: downloadGetTempfile,
+  },
+  autoTagger
 };
 
 if (!module.parent) {
