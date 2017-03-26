@@ -28,7 +28,8 @@
     "mime-types": "^2.1.14",
     "needle": "^1.4.5",
     "read": "^1.0.7",
-    "tempfile": "^1.1.1"
+    "tempfile": "^1.1.1",
+    "tmp": "^0.0.31"
   },
   "devDependencies": {
     "eslint": "^3.12.2",
