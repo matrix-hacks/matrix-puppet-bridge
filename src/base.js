@@ -5,7 +5,7 @@ const bangCommand = require('./bang-command');
 const urlParse = require('url').parse;
 const inspect = require('util').inspect;
 const path = require('path');
-const { download, autoTagger } = require('./utils');
+const { download, autoTagger, isFilenameTagged } = require('./utils');
 const fs = require('fs');
 
 /**
@@ -563,7 +563,7 @@ class Base {
    * Returns a promise
    */
   handleThirdPartyRoomImageMessage(thirdPartyRoomImageMessageData) {
-    const { info, warn } = debug(this.handleThirdPartyRoomMessage.name);
+    const { info, warn } = debug(this.handleThirdPartyRoomImageMessage.name);
     info('handling third party room image message', thirdPartyRoomImageMessageData);
     let {
       roomId,
@@ -579,6 +579,20 @@ class Base {
 
     return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((matrixRoomId) => {
       return this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl).then((client) => {
+
+        if (senderId === undefined) {
+          info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
+          info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
+          info("if it came from a matrix client, then it's already in the client, sending again would dupe");
+          info("we use a tag on the end of messages to determine if it came from matrix");
+
+          if (this.isTaggedMatrixMessage(text) || isFilenameTagged(path)) {
+            info('it is from matrix, so just ignore it.');
+            return;
+          } else {
+            info('it is from 3rd party client');
+          }
+        }
 
         let upload = (buffer, opts)=>{
           return client.uploadContent(buffer, Object.assign({

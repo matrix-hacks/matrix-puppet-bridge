@@ -4,6 +4,8 @@ const concatStream = require('concat-stream');
 const needle = require('needle');
 const mime = require('mime-types');
 const urlParse = require('url').parse;
+const fs = require('fs');
+const tmp = require('tmp');
 
 const downloadGetStream = url => needle.get(url);
 
@@ -38,17 +40,21 @@ const downloadGetBufferAndType = url => {
   });
 };
 
-const fs = require('fs');
-const tmp = require('tmp');
+const FILENAME_TAG = '_mx_'; // goes right before file extension
+const FILENAME_TAG_PATTERN = /^.+_mx_\..+$/; // check if tag is right before file extension
 
-const downloadGetTempfile = url  => {
+const downloadGetTempfile = (url, opts={}) => {
+  let tag = opts.tagFilename ? FILENAME_TAG : '';
   return downloadGetBufferAndType(url).then(({ buffer, type}) => {
     const ext = mime.extension(type);
-    const tmpfile = tmp.fileSync({ postfix: '.'+ext });
+    const tmpfile = tmp.fileSync({ postfix: tag+'.'+ext });
     fs.writeFileSync(tmpfile.name, buffer);
     return { path: tmpfile.name, remove: tmpfile.removeCallback };
   });
 };
+
+const isFilenameTagged = (filepath) => !!filepath.match(FILENAME_TAG_PATTERN);
+
 
 const autoTagger = (senderId, self) => (text='') => {
   let out;
@@ -69,7 +75,8 @@ module.exports = {
     getBufferAndType: downloadGetBufferAndType,
     getTempfile: downloadGetTempfile,
   },
-  autoTagger
+  autoTagger,
+  isFilenameTagged,
 };
 
 if (!module.parent) {
