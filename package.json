@@ -1,6 +1,6 @@
 {
   "name": "matrix-puppet-bridge",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "description": "facilitates writing a certain kind of matrix bridge",
   "main": "index.js",
   "scripts": {
@@ -28,7 +28,8 @@
     "mime-types": "^2.1.14",
     "needle": "^1.4.5",
     "read": "^1.0.7",
-    "tempfile": "^1.1.1"
+    "tempfile": "^1.1.1",
+    "tmp": "^0.0.31"
   },
   "devDependencies": {
     "eslint": "^3.12.2",
