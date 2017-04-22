@@ -20,6 +20,11 @@ These bridges have been built using matrix-puppet-bridge:
 
 This is symptomatic of a homeserver that is unable to reach the bridge. If you curl the bridge URL in the yaml file that you have referenced in synapse's homeserver.yaml, does it 200 OK ? Most likely this is misconfigured. If you still have this issue ask us in [#matrix-puppet-bridge:matrix.org](https://riot.im/app/#/room/#matrix-puppet-bridge:matrix.org).
 
+Some hints:
+
+* We use node's `server.listen` function to create the server. We do not pass in a hostnae, only the port that you configure. See the default behavior explained here with respect to IPv4 and IPv6: https://nodejs.org/dist/latest-v7.x/docs/api/http.html#http_server_listen_port_hostname_backlog_callback
+* Use netstat and curl to see if the homeserver can truly access the bridge. It's probably the most common problem users face.
+
 ### Q: My access token has changed. How can I quickly update my access token on the bridge?
 
 Run this in your bridge directory:
