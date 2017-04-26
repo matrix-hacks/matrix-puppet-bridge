@@ -159,6 +159,16 @@ class Base {
   }
 
   /**
+   * Implement how a read receipt is sent over the third party network
+   *
+   * @param {string} _thirdPartyRoomId
+   * @returns {Promise}
+   */
+  sendReadReceiptAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId) {
+    return Promise.reject(new Error('please implement sendReadReceiptAsPuppetToThirdPartyRoomWithId'));
+  }
+
+  /**
    * Return a postfix for the status room name.
    * It should be fairly unique so that it's unlikely to clash with a legitmate user.
    * (Let's hope nobody likes the name 'puppetStatusRoom')
@@ -193,6 +203,8 @@ class Base {
     this.deduplicationTagRegex = new RegExp(this.deduplicationTagPattern);
     this.bridge = bridge || this.setupBridge(config);
     info('initialized');
+
+    this.puppet.setApp(this)
   }
 
   /**
@@ -514,6 +526,9 @@ class Base {
           return matrixRoomId;
         }
       });
+    }).then(matrixRoomId => {
+      this.puppet.saveThirdPartyRoomId(matrixRoomId, thirdPartyRoomId);
+      return matrixRoomId;
     });
   }
 
