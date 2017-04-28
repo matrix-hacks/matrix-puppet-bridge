@@ -31,11 +31,19 @@ Run this in your bridge directory:
 
 `node -e "new (require('matrix-puppet-bridge').Puppet)('config.json').associate()"`
 
-### Q: Is this made to handle several facebook/hangouts/slack users within one bridge? In other words, can I use this for "mass hosting" of many facebook/hangouts/slack with one matrix homeserver?
+### Q: Is this made to handle several facebook/hangouts/slack users within one bridge? In other words, can I use this for "mass hosting" of many imessage/facebook/hangouts identities with one matrix homeserver?
 
-This is not designed for mass hosting of bridges. Several of the protocols we support do not lend themselves well to mass hosting. For example, the iMessage bridge must run on osx, and authentication must be handled by using the login gui of the iMessages app, and there's not a clean way of running multiple iMessages apps and automating them. Beyond that, a couple of other protocls do not support a proper oauth workflow (see facebook which definitely does not unless it's for a 'bot user', and to some extent hangouts doesn't support it either [though unsupported techniques do exist]), so any kind of "mass hosting" setup that allowed for configuration of these bridges via a "/nickserv" type interface would require sending your facebook/hangouts password to a "man in the middle" (homeserver in this case). This is just not acceptable to the authors of this framework, so you will probably never see it implemented by us.
+No, unfortunately. This is not designed for mass hosting of bridges. 
+
+1. **Setup Challenges** Several of the protocols we support do not lend themselves well to mass hosting. For example, the iMessage bridge must run on osx, and authentication must be handled by using the login gui of the iMessages app, and there's not a clean way of running multiple iMessages apps and automating them. Beyond that, a couple of other protocols do not support a proper oauth workflow (see facebook which definitely does not unless it's for a 'bot user', and to some extent hangouts doesn't support it either [though unsupported techniques do exist]).
+
+2. **Password Leaks** Any kind of "mass hosting" setup that allowed for configuration of these bridges via a "/nickserv" type interface would require sending your facebook/hangouts password to a "man in the middle" (homeserver in this case). This is just not acceptable to the authors of this framework, so you will probably never see it implemented by us.
+
+3. **Conversation Leaks** An effort to build a mass-hosted version of this would entail putting not just passwords, but also personal content and conversations on public homeservers (e.g. personal conversations over facebook, or iMessage) that you do not control, therefore we think it is better to go towards a model in which you run your own homeserver, as a prerequisite. That said, sometimes you have a more technical friend and trust them with this, but in that case we believe it's better for that friend to show you how to run your own HS if you want to use these bridges, rather than compromise on the privacy issue
 
 In summary, this bridge framework is explicitly for bridges that are "personal" in nature. It assumes the user cares a great deal about the privacy of their facebook/hangouts/imessage/etc passwords and messages, and as such desire to run their own homeserver and all their own bridges.
+
+That said, we are open to proposals in which we can solve 2 and 3, which would allow homeserver sharing. Such a proposal would necessarily span across the matrix ecosystem, so you may want to reference https://matrix.org/docs/spec/ if you haven't already.
 
 ### Q: What about service X?
 
