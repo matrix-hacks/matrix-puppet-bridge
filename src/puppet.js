@@ -25,7 +25,10 @@ class Puppet {
     this.jsonFile = jsonFile;
     this.id = null;
     this.client = null;
+    this.thirdPartyRooms = {};
+    this.app = null;
   }
+
   /**
    * Reads the config file, creates a matrix client, connects, and waits for sync
    *
@@ -47,6 +50,25 @@ class Puppet {
         this.client.on("RoomState.members", (event, state, _member) => {
           this.matrixRoomMembers[state.roomId] = Object.keys(state.members);
         });
+
+        this.client.on("Room.receipt", (event, room) => {
+          if (this.app === null) {
+            return;
+          }
+
+          if (room.roomId in this.thirdPartyRooms) {
+            let content = event.getContent();
+            for (var eventId in content) {
+              for (var userId in content[eventId]['m.read']) {
+                if (userId === this.id) {
+                  console.log("Receive a read event from ourself");
+                  return this.app.sendReadReceiptAsPuppetToThirdPartyRoomWithId(this.thirdPartyRooms[room.roomId]);
+                }
+              }
+            }
+          }
+        });
+
         this.client.on('sync', (state) => {
           if ( state === 'PREPARED' ) {
             console.log('synced');
@@ -56,6 +78,7 @@ class Puppet {
       });
     });
   }
+
   /**
    * Get the list of matrix room members
    *
@@ -65,6 +88,7 @@ class Puppet {
   getMatrixRoomMembers(roomId) {
     return this.matrixRoomMembers[roomId] || [];
   }
+
   /**
    * Returns the MatrixClient
    *
@@ -73,6 +97,7 @@ class Puppet {
   getClient() {
     return this.client;
   }
+
   /**
    * Prompts user for credentials and updates the puppet section of the config
    *
@@ -108,6 +133,25 @@ class Puppet {
         });
       });
     });
+  }
+
+  /**
+   * Save a third party room id
+   *
+   * @param {string} matrixRoomId matrix room id
+   * @param {string} thirdPartyRoomId third party room id
+   */
+  saveThirdPartyRoomId(matrixRoomId, thirdPartyRoomId) {
+    this.thirdPartyRooms[matrixRoomId] = thirdPartyRoomId;
+  }
+
+  /**
+   * Set the App object
+   *
+   * @param {MatrixPuppetBridgeBase} app the App object
+   */
+  setApp(app) {
+    this.app = app;
   }
 }
 
