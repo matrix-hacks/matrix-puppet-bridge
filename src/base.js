@@ -586,7 +586,7 @@ class Base {
       senderId,
       avatarUrl,
       text,
-      url, path, // either one is fine
+      url, path, buffer, // either one is fine
       h,
       w,
       mimetype
@@ -616,7 +616,7 @@ class Base {
             rawResponse: false
           }, opts || {})).then((res)=>{
             return {
-              content_uri: res.content_uri,
+              content_uri: res.content_uri || res,
               size: buffer.length
             };
           });
@@ -635,6 +635,8 @@ class Base {
               return upload(buffer);
             });
           };
+        } else if ( buffer ) {
+          promise = () => upload(buffer);
         } else {
           promise = Promise.reject(new Error('missing url or path'));
         }
@@ -642,6 +644,7 @@ class Base {
         const tag = autoTagger(senderId, this);
 
         promise().then(({ content_uri, size }) => {
+          info('uploaded to', content_uri);
           let msg = tag(text);
           let opts = { mimetype, h, w, size };
           return client.sendImageMessage(matrixRoomId, content_uri, opts, msg);
