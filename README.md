@@ -13,6 +13,7 @@ These bridges have been built using matrix-puppet-bridge:
 * https://github.com/matrix-hacks/matrix-puppet-facebook
 * https://github.com/matrix-hacks/matrix-puppet-slack
 * https://github.com/matrix-hacks/matrix-puppet-hangouts
+* https://github.com/matrix-hacks/matrix-puppet-signal
 
 ## FAQ
 
