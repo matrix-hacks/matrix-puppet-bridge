@@ -297,8 +297,11 @@ class Base {
       const name = this.getServiceName() + " Protocol";
       const topic = this.getServiceName() + " Protocol Status Messages";
       info("creating status room !!!!", ">>>>"+roomAliasLocalPart+"<<<<", name, topic);
-      return botClient.createRoom({
-        name, topic, room_alias_name: roomAliasLocalPart
+      return botIntent.createRoom({
+        createAsClient: false,
+        options: {
+          name, topic, room_alias_name: roomAliasLocalPart
+        }
       }).then(({room_id}) => {
         info("status room created", room_id, roomAliasLocalPart);
         return room_id;
@@ -533,8 +536,11 @@ class Base {
         info("got 3p room data", thirdPartyRoomData);
         const { name, topic } = thirdPartyRoomData;
         info("creating room !!!!", ">>>>"+roomAliasName+"<<<<", name, topic);
-        return botClient.createRoom({
-          name, topic, room_alias_name: roomAliasName
+        return botIntent.createRoom({
+          createAsClient: true, // bot won't auto-join the room in this case
+          options: {
+            name, topic, room_alias_name: roomAliasName
+          }
         }).then(({room_id}) => {
           info("room created", room_id, roomAliasName);
           return room_id;
