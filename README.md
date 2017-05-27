@@ -81,7 +81,7 @@ In the examples above, "__mpb__" was used as the special tag, but it can be anyt
 
 ### Q: How can I add bang (!) commands to a room, such as !echo
 
-`matrix-puppet-bridge` comes with a bang command processor. Simply define a method and it will be invoked instead of being forwarded to the third perty service:
+`matrix-puppet-bridge` comes with a bang command processor. Simply define a method and it will be invoked instead of being forwarded to the third party service:
 
 ```javascript
 class App extends MatrixPuppetBridgeBase {
