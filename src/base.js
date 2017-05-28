@@ -515,9 +515,11 @@ class Base {
     const botClient = botIntent.getClient();
     const puppetUserId = puppetClient.credentials.userId;
 
+    let creatorIntent;
+
     const grantPuppetMaxPowerLevel = (room_id) => {
       info("ensuring puppet user has full power over this room");
-      return botIntent.setPowerLevel(room_id, puppetUserId, 100).then(()=>{
+      return creatorIntent.setPowerLevel(room_id, puppetUserId, 100).then(()=>{
         info('granted puppet client admin status on the protocol status room');
       }).catch((err)=>{
         warn(err);
@@ -540,8 +542,10 @@ class Base {
           name, topic, room_alias_name: roomAliasName
         };
         if ( ghostIntent ) {
+          creatorIntent = ghostIntent;
           return ghostIntent.createRoom({ options, createAsClient: false });
         } else {
+          creatorIntent = botIntent;
           return botIntent.createRoom({ options, createAsClient: true });
         }
       }).then(({room_id}) => {
