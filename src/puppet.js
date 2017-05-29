@@ -4,7 +4,7 @@ const fs = require('fs');
 const readFile = Promise.promisify(fs.readFile);
 const writeFile = Promise.promisify(fs.writeFile);
 const read = Promise.promisify(require('read'));
-const whyPuppeting = 'https://github.com/kfatehi/matrix-appservice-imessage/commit/8a832051f79a94d7330be9e252eea78f76d774bc';
+const whyPuppeting = 'http://bit.ly/2r59S0m';
 
 const readConfigFile = (jsonFile) => {
   return readFile(jsonFile).then(buffer => {

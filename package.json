@@ -4,7 +4,8 @@
   "description": "facilitates writing a certain kind of matrix bridge",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"no tests at this time\"; exit 1",
+    "test": "mocha --recursive test",
+    "autotest": "mocha -w --recursive test",
     "gendoc": "jsdoc -r src -P package.json -R README.md -d docs"
   },
   "keywords": [
@@ -32,8 +33,11 @@
     "tmp": "^0.0.31"
   },
   "devDependencies": {
+    "chai": "^4.0.0",
     "eslint": "^3.12.2",
-    "jsdoc": "^3.4.3"
+    "jsdoc": "^3.4.3",
+    "mocha": "^3.4.2",
+    "sinon": "^2.3.2"
   },
   "eslintConfig": {
     "env": {
