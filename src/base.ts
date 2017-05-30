@@ -1,196 +1,48 @@
-const { info, warn, error } = require('./debug')('Base');
+const info = require('debug')('matrix-puppet:info');
+const warn = require('debug')('matrix-puppet:warn');
+const error = require('debug')('matrix-puppet:error');
 const Promise = require('bluebird');
-const { Bridge, RemoteUser } = require('matrix-appservice-bridge');
-const bangCommand = require('./bang-command');
+import { Bridge, RemoteUser } from 'matrix-appservice-bridge';
+import { BangCommand, parseBangCommand } from './bang-command';
 const urlParse = require('url').parse;
 const inspect = require('util').inspect;
 const path = require('path');
-const { download, autoTagger, isFilenameTagged } = require('./utils');
+import { download, autoTagger, isFilenameTagged } from './utils';
 const fs = require('fs');
 
 import { Puppet } from './puppet';
 import { Config } from './config';
-import { Bridge } from './bridge';
+import { setupBridge } from './bridge-setup';
+import { ThirdPartyAdapter } from './third-party-adapter';
+import { Image } from './image';
 
 interface StatusMessageOptions {
   fixedWidthOutput?: boolean;
   roomAliasLocalPart?: string;
 }
 
-interface ThirdPartyUserData {
-  senderName: string;
-}
+export class Base {
+  private deduplicationTag: string;
+  private deduplicationTagPattern: string;
+  private deduplicationTagRegex: RegExp;
 
-class Base {
-  allowNullSenderName: boolean;
-  config: Config;
-  puppet: Puppet;
-  domain: string;
-  homeserver: string;
-  deduplicationTag: string;
-  deduplicationTagPattern: string;
-  deduplicationTagRegex: RegExp;
-  bridge: Bridge;
-  handleMatrixUserBangCommand?(cmd: string, data: object): void;
-
-  /**
-   * The short string to put before the ghost user name.
-   * e.g. return "groupme" for @groupme_bob:your.host.com
-   *
-   * @returns {string} The string to prefix localpart user ids of ghost users
-   */
-  getServicePrefix() {
-    throw new Error("override me");
-  }
-  /**
-   * A friendly name for the protocol.
-   * Use proper capitalization and make it look nice.
-   * e.g. return "GroupMe"
-   *
-   * @returns {string} A friendly name for the bridged protocol.
-   */
-  getServiceName() {
-    warn('getServiceName is not defined, falling back to getServicePrefix');
-    return this.getServicePrefix();
-  }
-
-  /**
-   * Return a user id to match against 3rd party user id's in order to know if the message is of self-origin
-   *
-   * @returns {string} Your user ID from the perspective of the third party
-   */
-  getPuppetThirdPartyUserId() {
-    throw new Error('override me');
-  }
-
-  /**
-   * Implement how a text-based message is sent over the third party network
-   *
-   * @param {string} _thirdPartyRoomId
-   * @param {string} _messageText
-   * @param {object} _matrixEvent
-   * @returns {Promise}
-   */
-  sendMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _messageText, _matrixEvent) {
-    return Promise.reject(new Error('please implement sendMessageAsPuppetToThirdPartyRoomWithId'));
-  }
-
-  /**
-   * Implement how an image message is sent over the third party network
-   *
-   * @param {string} _thirdPartyRoomId
-   * @param {object} _messageData
-   * @param {object} _matrixEvent
-   * @returns {Promise}
-   */
-  sendImageMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent) {
-    return Promise.reject(new Error('please implement sendImageMessageAsPuppetToThirdPartyRoomWithId'));
-  }
-
-  /**
-   * Implement how a read receipt is sent over the third party network
-   *
-   * @param {string} _thirdPartyRoomId
-   * @returns {Promise}
-   */
-  sendReadReceiptAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId) {
-    return Promise.reject(new Error('please implement sendReadReceiptAsPuppetToThirdPartyRoomWithId'));
-  }
-
-  /**
-   * Return a postfix for the status room name.
-   * It should be fairly unique so that it's unlikely to clash with a legitmate user.
-   * (Let's hope nobody likes the name 'puppetStatusRoom')
-   *
-   * If you use the default below, the bridge room's alias will end up being
-   * something like '#groupme_puppetStatusRoom'.
-   *
-   * There should be no need to override this.
-   *
-   * @returns {string} Postfix for the status room name.
-   */
-  getStatusRoomPostfix() {
-    return "puppetStatusRoom";
-  }
-
-  /**
-   * @constructor
-   *
-   * @param {object} config Config as a JavaScript object
-   * @param {object} puppet Instance of Puppet to use
-   * @param {object} bridge Optional instance of Bridge to use
-   */
-  constructor(config, puppet, bridge) {
-    if (!config) throw new Error('config must be defined');
-    this.allowNullSenderName = false;
+  constructor(private config: Config, private adapter: ThirdPartyAdapter, private puppet: Puppet, private bridge?:Bridge) {
     this.config = config;
     this.puppet = puppet;
-    this.domain = config.homeserverDomain;
-    this.homeserver = urlParse(config.bridge.homeserverUrl);
+    this.adapter = adapter;
     this.deduplicationTag = this.config.deduplicationTag || this.defaultDeduplicationTag();
     this.deduplicationTagPattern = this.config.deduplicationTagPattern || this.defaultDeduplicationTagPattern();
     this.deduplicationTagRegex = new RegExp(this.deduplicationTagPattern);
-    this.bridge = bridge || this.setupBridge(config);
+    this.bridge = bridge || setupBridge(config, this);
     info('initialized');
 
     this.puppet.setApp(this)
   }
 
-  /**
-   * Optional async call to get additional data about the third party user, for when this information does not arrive in the original payload
-   *
-   * @param {string} thirdPartyRoomId The unique identifier on the third party's side
-   * @returns {Promise} Resolve with an object like {senderName: 'some name'}
-   */
-  getThirdPartyUserDataById(_thirdPartyUserId): Promise<ThirdPartyUserData> {
-    throw new Error("override me and return or resolve a promise with at least {senderName: 'some name'}, otherwise provide it in the original payload and i will never be invoked");
-  }
-  /**
-   * Optional async call to get additional data about the third party room, for when this information does not arrive in the original payload
-   *
-   * @param {string} thirdPartyRoomId The unique identifier on the third party's side
-   * @returns {Promise} Resolve with an object like { name:string, topic:string }
-   */
-  getThirdPartyRoomDataById(_thirdPartyRoomId) {
-    throw new Error("override me");
+  getAdapter(): ThirdPartyAdapter {
+    return this.adapter;
   }
 
-  /**
-   * Instantiates a Bridge for you. Called by the constructor if an existing bridge instance was not provided.
-   *
-   * @param {object} config bridge configuration (homeserverUrl, domain, registration)
-   *
-   * @private
-   */
-  setupBridge(config: Config) {
-    return new Bridge({
-      homeserverUrl: config.homeserverUrl,
-      domain: config.homeserverDomain,
-      registration: config.registrationPath,
-      controller: {
-        onUserQuery: function(queriedUser) {
-          console.log('got user query', queriedUser);
-          return {}; // auto provision users w no additional data
-        },
-        onEvent: this.handleMatrixEvent.bind(this),
-        onAliasQuery: function() {
-          console.log('on alias query');
-        },
-        thirdPartyLookup: {
-          protocols: [this.getServicePrefix()],
-          getProtocol: function() {
-            console.log('get proto');
-          },
-          getLocation: function() {
-            console.log('get loc');
-          },
-          getUser: function() {
-            console.log('get user');
-          }
-        }
-      }
-    });
-  }
 
   /**
    * Async call to get the status room ID
@@ -199,8 +51,8 @@ class Base {
    * @returns {Promise} Promise resolving the Matrix room ID of the status room
    */
   getStatusRoomId(_roomAliasLocalPart?:string) {
-    const roomAliasLocalPart = _roomAliasLocalPart || this.getServicePrefix()+"_"+this.getStatusRoomPostfix();
-    const roomAlias = "#"+roomAliasLocalPart+":"+this.domain;
+    const roomAliasLocalPart = _roomAliasLocalPart || this.config.servicePrefix+"_"+this.config.statusRoomPostfix;
+    const roomAlias = "#"+roomAliasLocalPart+":"+this.config.homeserverDomain;
     const puppetClient = this.puppet.getClient();
 
     const botIntent = this.getIntentFromApplicationServerBot();
@@ -225,8 +77,8 @@ class Base {
       info("found matrix room via alias. room_id:", room_id);
       return grantPuppetMaxPowerLevel(room_id);
     }, (_err) => {
-      const name = this.getServiceName() + " Protocol";
-      const topic = this.getServiceName() + " Protocol Status Messages";
+      const name = this.config.serviceName + " Protocol";
+      const topic = this.config.serviceName + " Protocol Status Messages";
       info("creating status room !!!!", ">>>>"+roomAliasLocalPart+"<<<<", name, topic);
       return botIntent.createRoom({
         createAsClient: false,
@@ -348,29 +200,29 @@ class Base {
     });
   }
   getGhostUserFromThirdPartySenderId(id) {
-    return "@"+this.getServicePrefix()+"_"+id+":"+this.domain;
+    return "@"+this.config.servicePrefix+"_"+id+":"+this.config.homeserverDomain;
   }
   getRoomAliasFromThirdPartyRoomId(id) {
-    return "#"+this.getRoomAliasLocalPartFromThirdPartyRoomId(id)+':'+this.domain;
+    return "#"+this.getRoomAliasLocalPartFromThirdPartyRoomId(id)+':'+this.config.homeserverDomain;
   }
   getThirdPartyUserIdFromMatrixGhostId(matrixGhostId) {
-    const patt = new RegExp(`^@${this.getServicePrefix()}_(.+)$`);
-    const localpart = matrixGhostId.replace(':'+this.domain, '');
+    const patt = new RegExp(`^@${this.config.servicePrefix}_(.+)$`);
+    const localpart = matrixGhostId.replace(':'+this.config.homeserverDomain, '');
     const matches = localpart.match(patt);
     return matches ? matches[1] : null;
   }
   getThirdPartyRoomIdFromMatrixRoomId(matrixRoomId) {
-    const patt = new RegExp(`^#${this.getServicePrefix()}_(.+)$`);
+    const patt = new RegExp(`^#${this.config.servicePrefix}_(.+)$`);
     const room = this.puppet.getClient().getRoom(matrixRoomId);
     info('reducing array of alases to a 3prid');
     return room.getAliases().reduce((result, alias) => {
-      const localpart = alias.replace(':'+this.domain, '');
+      const localpart = alias.replace(':'+this.config.homeserverDomain, '');
       const matches = localpart.match(patt);
       return matches ? matches[1] : result;
     }, null);
   }
   getRoomAliasLocalPartFromThirdPartyRoomId(id) {
-    return this.getServicePrefix()+"_"+id;
+    return this.config.servicePrefix+"_"+id;
   }
 
   /**
@@ -402,7 +254,7 @@ class Base {
   /**
    * Returns a Promise resolving {senderName}
    *
-   * Optional code path which is only called if the derived class does not
+   * Optional code path which is only called if the adapter does not
    * provide a senderName when invoking handleThirdPartyRoomMessage
    *
    * @param {string} thirdPartyUserId
@@ -416,10 +268,10 @@ class Base {
         return rUser;
       } else {
         info("did not find existing remote user in store, we must create it now");
-        return this.getThirdPartyUserDataById(thirdPartyUserId).then(thirdPartyUserData => {
+        return this.adapter.getUserData(thirdPartyUserId).then(thirdPartyUserData => {
           info("got 3p user data:", thirdPartyUserData);
           return new RemoteUser(thirdPartyUserId, {
-            senderName: thirdPartyUserData.senderName
+            senderName: thirdPartyUserData.name
           });
         }).then(rUser => {
           return userStore.setRemoteUser(rUser);
@@ -431,6 +283,7 @@ class Base {
       }
     });
   }
+
   getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId) {
     const roomAlias = this.getRoomAliasFromThirdPartyRoomId(thirdPartyRoomId);
     const roomAliasName = this.getRoomAliasLocalPartFromThirdPartyRoomId(thirdPartyRoomId);
@@ -457,7 +310,7 @@ class Base {
       return room_id;
     }, (_err) => {
       info("the room doesn't exist. we need to create it for the first time");
-      return Promise.resolve(this.getThirdPartyRoomDataById(thirdPartyRoomId)).then(thirdPartyRoomData => {
+      return Promise.resolve(this.adapter.getRoomData(thirdPartyRoomId)).then(thirdPartyRoomData => {
         info("got 3p room data", thirdPartyRoomData);
         const { name, topic } = thirdPartyRoomData;
         info("creating room !!!!", ">>>>"+roomAliasName+"<<<<", name, topic);
@@ -511,7 +364,7 @@ class Base {
     if (senderId === undefined) {
       return Promise.resolve(this.puppet.getClient());
     } else {
-      if (!senderName && !this.allowNullSenderName) {
+      if (!senderName && !this.config.allowNullSenderName) {
         if (doNotTryToGetRemoteUserStoreData)
           throw new Error('preventing an endless loop');
 
@@ -672,7 +525,7 @@ class Base {
     });
   }
 
-  handleMatrixEvent(req, _context) {
+  public handleMatrixEvent(req, _context) {
     const data = req.getData();
     if (data.type === 'm.room.message') {
       info('incoming message. data:', data);
@@ -681,7 +534,7 @@ class Base {
       return warn('ignored a matrix event', data.type);
     }
   }
-  handleMatrixMessageEvent(data) {
+  private handleMatrixMessageEvent(data) {
     const { room_id, content: { body, msgtype } } = data;
 
     let promise, msg;
@@ -692,7 +545,7 @@ class Base {
     }
 
     const thirdPartyRoomId = this.getThirdPartyRoomIdFromMatrixRoomId(room_id);
-    const isStatusRoom = thirdPartyRoomId === this.getStatusRoomPostfix();
+    const isStatusRoom = thirdPartyRoomId === this.config.statusRoomPostfix;
 
     if (!thirdPartyRoomId) {
       promise = () => Promise.reject(new Error('could not determine third party room id!'));
@@ -709,22 +562,25 @@ class Base {
       msg = this.tagMatrixMessage(body);
 
       if (msgtype === 'm.text') {
-        if (this.handleMatrixUserBangCommand) {
-          const bc = bangCommand(body);
-          if (bc) return this.handleMatrixUserBangCommand(bc, data);
+        if (this.adapter.handleMatrixUserBangCommand) {
+          const bc = parseBangCommand(body);
+          if (bc) return this.adapter.handleMatrixUserBangCommand(bc, data);
         }
-        promise = () => this.sendMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, data);
+        promise = () => this.adapter.sendMessage(thirdPartyRoomId, msg);
       } else if (msgtype === 'm.image') {
         info("picture message from riot");
 
         let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
-        promise = () => this.sendImageMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
-          url, text: this.tagMatrixMessage(body),
-          mimetype: data.content.info.mimetype,
-          width: data.content.info.w,
-          height: data.content.info.h,
-          size: data.content.info.size,
-        }, data);
+        promise = () => {
+          const image : Image = {
+            url, text: this.tagMatrixMessage(body),
+            mimetype: data.content.info.mimetype,
+            width: data.content.info.w,
+            height: data.content.info.h,
+            size: data.content.info.size,
+          }
+          return this.adapter.sendImageMessage(thirdPartyRoomId, image);
+        };
       } else {
         let err = 'dont know how to handle this msgtype '+msgtype;
         promise = () => Promise.reject(new Error(err));
@@ -735,16 +591,16 @@ class Base {
       this.sendStatusMsg({}, err, data);
     });
   }
-  defaultDeduplicationTag() {
+  private defaultDeduplicationTag() {
     return " \ufeff";
   }
-  defaultDeduplicationTagPattern() {
+  private defaultDeduplicationTagPattern() {
     return " \\ufeff$";
   }
-  tagMatrixMessage(text) {
+  private tagMatrixMessage(text) {
     return text+this.deduplicationTag;
   }
-  isTaggedMatrixMessage(text) {
+  private isTaggedMatrixMessage(text) {
     return this.deduplicationTagRegex.test(text);
   }
   /**
@@ -760,7 +616,7 @@ class Base {
    * @param {string} avatarUrl a resource on the public web
    * @returns {Promise}
    */
-  setGhostAvatar(ghostIntent, avatarUrl) {
+  private setGhostAvatar(ghostIntent, avatarUrl) {
     const client = ghostIntent.getClient();
 
     return client.getProfileInfo(client.credentials.userId, 'avatar_url').then(({avatar_url})=>{
@@ -785,5 +641,3 @@ class Base {
     });
   }
 }
-
-module.exports = Base;

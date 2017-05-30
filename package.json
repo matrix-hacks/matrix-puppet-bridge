@@ -2,10 +2,12 @@
   "name": "matrix-puppet-bridge",
   "version": "1.15.1",
   "description": "facilitates writing a certain kind of matrix bridge",
-  "main": "index.js",
+  "main": "./dist/src/index.js",
+  "types": "./src/index.ts",
   "scripts": {
-    "test": "mocha -r ts-node/register --recursive test",
-    "autotest": "mocha -w -r ts-node/register --recursive test",
+    "prepare": "typings i && tsc",
+    "test": "mocha -r ts-node/register test/**/*.ts",
+    "autotest": "mocha -w --watch-extensions ts -r ts-node/register test/**/*.ts",
     "gendoc": "jsdoc -r src -P package.json -R README.md -d docs"
   },
   "keywords": [
@@ -30,50 +32,16 @@
     "needle": "^1.4.5",
     "read": "^1.0.7",
     "tempfile": "^1.1.1",
-    "tmp": "^0.0.31",
-    "ts-node": "^3.0.4",
-    "typescript": "^2.3.3",
-    "typings": "^2.1.1"
+    "tmp": "^0.0.31"
   },
   "devDependencies": {
-    "@types/chai": "^3.5.2",
-    "@types/mocha": "^2.2.41",
-    "@types/node": "^7.0.22",
     "chai": "^4.0.0",
     "eslint": "^3.12.2",
     "jsdoc": "^3.4.3",
     "mocha": "^3.4.2",
-    "sinon": "^2.3.2"
-  },
-  "eslintConfig": {
-    "env": {
-      "es6": true,
-      "node": true
-    },
-    "extends": "eslint:recommended",
-    "rules": {
-      "no-console": 0,
-      "indent": [
-        "error",
-        2,
-        {
-          "SwitchCase": 1
-        }
-      ],
-      "linebreak-style": [
-        "error",
-        "unix"
-      ],
-      "semi": [
-        "error",
-        "always"
-      ],
-      "no-unused-vars": [
-        "error",
-        {
-          "argsIgnorePattern": "^_"
-        }
-      ]
-    }
+    "sinon": "^2.3.2",
+    "ts-node": "^3.0.4",
+    "typescript": "^2.3.3",
+    "typings": "^2.1.1"
   }
 }

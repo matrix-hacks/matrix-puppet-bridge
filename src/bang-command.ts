@@ -1,7 +1,12 @@
-// Thanks to
-// https://github.com/krismuniz/slash-command/blob/4349ea6b60e6451b6b6537ea4551b8c522b4be87/index.js
-'use strict';
-const bangCommand = (s) => {
+export interface BangCommand {
+  bangcommand: string;
+  command: string;
+  subcommands: string[];
+  body: string;
+  original: string;
+}
+
+export const parseBangCommand = (s) : BangCommand => {
   if ( !s.startsWith('!') ) return null;
   let cmds = s.split(' ')[0].match(/\!([\w-=:.@]+)/ig);
   let bangcmds = null;
@@ -23,5 +28,3 @@ const bangCommand = (s) => {
     original: s
   };
 };
-
-module.exports = bangCommand;

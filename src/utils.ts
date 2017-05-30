@@ -1,4 +1,3 @@
-const debug = require('./debug')('utils');
 const Promise = require('bluebird');
 const concatStream = require('concat-stream');
 const needle = require('needle');
@@ -43,7 +42,11 @@ const downloadGetBufferAndType = url => {
 const FILENAME_TAG = '_mx_'; // goes right before file extension
 const FILENAME_TAG_PATTERN = /^.+_mx_\..+$/; // check if tag is right before file extension
 
-const downloadGetTempfile = (url, opts={}) => {
+interface DownloadGetTempfileParams {
+  tagFilename: string;
+}
+
+const downloadGetTempfile = (url, opts:DownloadGetTempfileParams) => {
   let tag = opts.tagFilename ? FILENAME_TAG : '';
   return downloadGetBufferAndType(url).then(({ buffer, type}) => {
     const ext = mime.extension(type);
@@ -53,10 +56,10 @@ const downloadGetTempfile = (url, opts={}) => {
   });
 };
 
-const isFilenameTagged = (filepath) => !!filepath.match(FILENAME_TAG_PATTERN);
+export const isFilenameTagged = (filepath) => !!filepath.match(FILENAME_TAG_PATTERN);
 
 
-const autoTagger = (senderId, self) => (text='') => {
+export const autoTagger = (senderId, self) => (text='') => {
   let out;
   if (senderId === undefined) {
     // tag the message to know it was sent by the bridge
@@ -67,21 +70,10 @@ const autoTagger = (senderId, self) => (text='') => {
   return out;
 };
 
-module.exports = {
-  download: {
-    getStream: downloadGetStream,
-    getBuffer: downloadGetBuffer,
-    getBufferAndHeaders: downloadGetBufferAndHeaders,
-    getBufferAndType: downloadGetBufferAndType,
-    getTempfile: downloadGetTempfile,
-  },
-  autoTagger,
-  isFilenameTagged,
-};
-
-if (!module.parent) {
-  module.exports.download.getBufferAndType('https://lh4.googleusercontent.com/--SWFkg5vRpY/AAAAAAAAAAI/AAAAAAAADIU/gGtIbKdVV4c/photo.jpg')
-    .then(({buffer, type})=>{
-      console.log(buffer.length, type);
-    });
+export const download = {
+  getStream: downloadGetStream,
+  getBuffer: downloadGetBuffer,
+  getBufferAndHeaders: downloadGetBufferAndHeaders,
+  getBufferAndType: downloadGetBufferAndType,
+  getTempfile: downloadGetTempfile,
 }

@@ -13,6 +13,7 @@ const readConfigFile = (jsonFile: string) => {
 };
 
 import { MatrixClient } from './matrix-client';
+import { ThirdPartyAdapter } from './third-party-adapter';
 
 /**
  * Puppet class
@@ -20,9 +21,9 @@ import { MatrixClient } from './matrix-client';
 export class Puppet {
   id: string;
   client: MatrixClient;
-  thirdPartyRooms: any;
-  app: any;
-  matrixRoomMembers: any;
+  private thirdPartyRooms: any;
+  private adapter: ThirdPartyAdapter;
+  private matrixRoomMembers: any;
 
   /**
    * Constructs a Puppet
@@ -33,7 +34,7 @@ export class Puppet {
     this.id = null;
     this.client = null;
     this.thirdPartyRooms = {};
-    this.app = null;
+    this.adapter = null;
   }
 
   /**
@@ -59,17 +60,15 @@ export class Puppet {
         });
 
         this.client.on("Room.receipt", (event, room) => {
-          if (this.app === null) {
-            return;
-          }
-
-          if (room.roomId in this.thirdPartyRooms) {
-            let content = event.getContent();
-            for (var eventId in content) {
-              for (var userId in content[eventId]['m.read']) {
-                if (userId === this.id) {
-                  console.log("Receive a read event from ourself");
-                  return this.app.sendReadReceiptAsPuppetToThirdPartyRoomWithId(this.thirdPartyRooms[room.roomId]);
+          if (this.adapter && this.adapter.sendReadReceipt) {
+            if (room.roomId in this.thirdPartyRooms) {
+              let content = event.getContent();
+              for (var eventId in content) {
+                for (var userId in content[eventId]['m.read']) {
+                  if (userId === this.id) {
+                    console.log("Receive a read event from ourself");
+                    return this.adapter.sendReadReceipt(this.thirdPartyRooms[room.roomId]);
+                  }
                 }
               }
             }
@@ -159,6 +158,6 @@ export class Puppet {
    * @param {MatrixPuppetBridgeBase} app the App object
    */
   setApp(app) {
-    this.app = app;
+    this.adapter = app.getAdapter();
   }
 }
