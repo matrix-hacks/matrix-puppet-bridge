@@ -6,23 +6,30 @@ const writeFile = Promise.promisify(fs.writeFile);
 const read = Promise.promisify(require('read'));
 const whyPuppeting = 'http://bit.ly/2r59S0m';
 
-const readConfigFile = (jsonFile) => {
+const readConfigFile = (jsonFile: string) => {
   return readFile(jsonFile).then(buffer => {
     return JSON.parse(buffer);
   });
 };
 
+import { MatrixClient } from './matrix-client';
+
 /**
  * Puppet class
  */
-class Puppet {
+export class Puppet {
+  id: string;
+  client: MatrixClient;
+  thirdPartyRooms: any;
+  app: any;
+  matrixRoomMembers: any;
+
   /**
    * Constructs a Puppet
    *
    * @param {string} jsonFile path to JSON config file
    */
-  constructor(jsonFile) {
-    this.jsonFile = jsonFile;
+  constructor(public jsonFile: string) {
     this.id = null;
     this.client = null;
     this.thirdPartyRooms = {};
@@ -121,13 +128,14 @@ class Puppet {
         let matrixClient = matrixSdk.createClient(config.bridge.homeserverUrl);
         return matrixClient.loginWithPassword(id, password).then(accessDat => {
           console.log("log in success");
-          return writeFile(this.jsonFile, JSON.stringify(Object.assign({}, config, {
+          return writeFile(this.jsonFile, JSON.stringify({
+            ...config, 
             puppet: {
               id,
               localpart, 
               token: accessDat.access_token
             }
-          }), null, 2)).then(()=>{
+          }), null, 2).then(()=>{
             console.log('Updated config file '+this.jsonFile);
           });
         });
@@ -154,5 +162,3 @@ class Puppet {
     this.app = app;
   }
 }
-
-module.exports = Puppet;

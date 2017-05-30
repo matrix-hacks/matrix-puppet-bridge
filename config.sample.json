@@ -1,12 +1,6 @@
 {
-  "groupme": {
-    "accessToken": "your-access-token"
-  },
-  "registrationPath": "groupme-registration.yaml",
   "port": 8090,
-  "bridge": {
-    "homeserverUrl":"https://synapse.keyvan.pw",
-    "domain": "synapse.keyvan.pw",
-    "registration": "groupme-registration.yaml"
-  }
+  "homeserverDomain": "dev.synapse.mdks.org",
+  "homeserverUrl":"https://dev.synapse.mdks.org",
+  "registrationPath": "registration.yaml"
 }

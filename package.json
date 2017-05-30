@@ -4,8 +4,8 @@
   "description": "facilitates writing a certain kind of matrix bridge",
   "main": "index.js",
   "scripts": {
-    "test": "mocha --recursive test",
-    "autotest": "mocha -w --recursive test",
+    "test": "mocha -r ts-node/register --recursive test",
+    "autotest": "mocha -w -r ts-node/register --recursive test",
     "gendoc": "jsdoc -r src -P package.json -R README.md -d docs"
   },
   "keywords": [
@@ -30,9 +30,15 @@
     "needle": "^1.4.5",
     "read": "^1.0.7",
     "tempfile": "^1.1.1",
-    "tmp": "^0.0.31"
+    "tmp": "^0.0.31",
+    "ts-node": "^3.0.4",
+    "typescript": "^2.3.3",
+    "typings": "^2.1.1"
   },
   "devDependencies": {
+    "@types/chai": "^3.5.2",
+    "@types/mocha": "^2.2.41",
+    "@types/node": "^7.0.22",
     "chai": "^4.0.0",
     "eslint": "^3.12.2",
     "jsdoc": "^3.4.3",
