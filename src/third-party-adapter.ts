@@ -1,11 +1,11 @@
 import { BangCommand } from './bang-command';
 import { Image } from './image';
 
-interface ThirdPartyUserData {
+export interface ThirdPartyUserData {
   name: string;
 }
 
-interface RoomData {
+export interface RoomData {
   name:string;
   topic:string;
 }

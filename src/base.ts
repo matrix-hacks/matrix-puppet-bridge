@@ -16,7 +16,7 @@ import { setupBridge } from './bridge-setup';
 import { ThirdPartyAdapter } from './third-party-adapter';
 import { Image } from './image';
 
-interface StatusMessageOptions {
+export interface StatusMessageOptions {
   fixedWidthOutput?: boolean;
   roomAliasLocalPart?: string;
 }

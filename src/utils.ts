@@ -42,11 +42,11 @@ const downloadGetBufferAndType = url => {
 const FILENAME_TAG = '_mx_'; // goes right before file extension
 const FILENAME_TAG_PATTERN = /^.+_mx_\..+$/; // check if tag is right before file extension
 
-interface DownloadGetTempfileParams {
+export interface DownloadGetTempfileOptions {
   tagFilename: string;
 }
 
-const downloadGetTempfile = (url, opts:DownloadGetTempfileParams) => {
+const downloadGetTempfile = (url, opts:DownloadGetTempfileOptions) => {
   let tag = opts.tagFilename ? FILENAME_TAG : '';
   return downloadGetBufferAndType(url).then(({ buffer, type}) => {
     const ext = mime.extension(type);

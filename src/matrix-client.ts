@@ -1,8 +1,8 @@
-interface Credentials {
+export interface Credentials {
   userId: string;
 }
 
-interface MatrixRoom {
+export interface MatrixRoom {
   getAliases(): string[];
 }
 
