@@ -157,7 +157,7 @@ export class Puppet {
    *
    * @param {MatrixPuppetBridgeBase} app the App object
    */
-  setApp(app) {
-    this.adapter = app.getAdapter();
+  setAdapter(adapter : ThirdPartyAdapter) {
+    this.adapter = adapter;
   }
 }

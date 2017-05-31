@@ -4,49 +4,84 @@ const stub = require('sinon').stub;
 import { Puppet } from '../src/puppet';
 import { Base } from '../src/base';
 import { Config } from '../src/config';
-import { ThirdPartyAdapter } from '../src/third-party-adapter';
-
-const config : Config = {
-  servicePrefix: "test",
-  serviceName: "Test",
-  port: 8090,
-  homeserverDomain: "dev.synapse.mdks.org",
-  homeserverUrl:"https://dev.synapse.mdks.org",
-  registrationPath: "registration.yaml"
-};
+import {
+  ThirdPartyAdapter,
+  ThirdPartyMessagePayload
+} from '../src/third-party-adapter';
+import { Bridge } from 'matrix-appservice-bridge';
+import { Intent } from '../src/intent';
+import { Credentials, MatrixClient } from '../src/matrix-client';
 
 describe('base', ()=>{
-  it("creates an app", () => {
-    const puppet = new Puppet('');
-    puppet.setApp = stub();
-    //class Thing {
-    //  sendMessage(thirdPartyRoomId: string, text: string) {
-    //    return new Promise(function(resolve, reject) {
-    //    });
-    //  }
-    //  sendImageMessage(thirdPartyRoomId: string, ImageData) {
-    //    return Promise.resolve();
-    //  }
-    //  sendReadReceipt(thirdPartyRoomId: string) {
-    //    return Promise.resolve();
-    //  }
-    //  getRoomData?(thirdPartyRoomId: string) {
-    //    return Promise.resolve({ name: 'foo', topic: 'bar' })
-    //  }
-    //  getUserData?(thirdPartyUserId: string) {
-    //    return Promise.resolve({ name: 'foo' });
-    //  }
-    //  handleMatrixUserBangCommand(cmd: BangCommand, data: object) {
-    //    return Promise.resolve();
-    //  }
-    //}
-    const adapter = <ThirdPartyAdapter>{
-      sendMessage(thirdPartyRoomId: string, text: string): Promise<void> {
-        return Promise.resolve();
+  it("handles third party message", () => {
+    const app = new Base(
+      <Config>{
+        servicePrefix: "test",
+        serviceName: "Test",
+        port: 8090,
+        homeserverDomain: "dev.synapse.mdks.org",
+        homeserverUrl:"https://dev.synapse.mdks.org",
+        registrationPath: "registration.yaml"
+      },
+      <ThirdPartyAdapter>{
+        sendMessage: (thirdPartyRoomId: string, text: string): Promise<void> => {
+          return Promise.resolve();
+        },
+        sendImageMessage: (thirdPartyRoomId: string, ImageData): Promise<void> => {
+          return Promise.resolve();
+        },
+        sendReadReceipt: (thirdPartyRoomId: string): Promise<void> => {
+          return Promise.resolve();
+        }
+      },
+      <Puppet>{
+        setAdapter:(adapter)=>{
+        },
+        getClient: () => {
+          return <MatrixClient>{
+            credentials: <Credentials>{
+              userId: ''
+            },
+            startClient: ()=>{},
+            on: (name, callback)=>{},
+            getRoomIdForAlias: (alias)=> {
+              return Promise.resolve({room_id: ''});
+            },
+            joinRoom: (id)=> {
+              return Promise.resolve();
+            }
+          }
+        }
+      },
+      <Bridge>{
+        getIntent: ()=>{
+          return <Intent>{
+            getClient: () => {
+              return <MatrixClient>{
+                credentials: <Credentials>{
+                  userId: ''
+                }
+              }
+            },
+            setPowerLevel: (roomId: string, userId: string, level: number): Promise<void> => {
+              return Promise.resolve()
+            },
+            join: (roomId: string): Promise<void> => {
+              return Promise.resolve()
+            },
+            sendMessage: (roomId: string, opts): Promise<void> => {
+              return Promise.resolve()
+            }
+          };
+        }
       }
-    };
-    console.log(adapter);
-    const app = new Base(config, adapter, puppet);
+    );
+
+    app.handleThirdPartyRoomMessage(<ThirdPartyMessagePayload>{
+      roomId: 'foo',
+      senderId: 'bar',
+      text: 'baz',
+    });
   });
 });
 

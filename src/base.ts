@@ -12,37 +12,67 @@ const fs = require('fs');
 
 import { Puppet } from './puppet';
 import { Config } from './config';
-import { setupBridge } from './bridge-setup';
-import { ThirdPartyAdapter } from './third-party-adapter';
+import { createBridge, BridgeController, ThirdPartyLookup } from './bridge-setup';
+import { Intent } from './intent';
+import { MatrixClient } from './matrix-client';
+
+import {
+  ThirdPartyAdapter,
+  ThirdPartyMessagePayload,
+  ThirdPartyImageMessagePayload,
+  ContactListUserData
+} from './third-party-adapter';
+
+import {
+  BaseInterface,
+  StatusMessageOptions
+} from './base-interface';
+
 import { Image } from './image';
 
-export interface StatusMessageOptions {
-  fixedWidthOutput?: boolean;
-  roomAliasLocalPart?: string;
-}
-
-export class Base {
+export class Base implements BaseInterface {
+  public adapter: ThirdPartyAdapter;
   private deduplicationTag: string;
   private deduplicationTagPattern: string;
   private deduplicationTagRegex: RegExp;
 
-  constructor(private config: Config, private adapter: ThirdPartyAdapter, private puppet: Puppet, private bridge?:Bridge) {
+  constructor(private config: Config, adapter: ThirdPartyAdapter, private puppet: Puppet, private bridge?:Bridge) {
     this.config = config;
     this.puppet = puppet;
     this.adapter = adapter;
     this.deduplicationTag = this.config.deduplicationTag || this.defaultDeduplicationTag();
     this.deduplicationTagPattern = this.config.deduplicationTagPattern || this.defaultDeduplicationTagPattern();
     this.deduplicationTagRegex = new RegExp(this.deduplicationTagPattern);
-    this.bridge = bridge || setupBridge(config, this);
+    if (bridge) {
+      this.bridge = bridge;
+    } else {
+      this.bridge = createBridge(config, <BridgeController>{
+        onUserQuery: function(queriedUser) {
+          info('got user query', queriedUser);
+          return {}; // auto provision users w no additional data
+        },
+        onEvent: this.handleMatrixEvent,
+        onAliasQuery: function() {
+          info('on alias query');
+        },
+        thirdPartyLookup: <ThirdPartyLookup>{
+          protocols: [config.servicePrefix],
+          getProtocol: function() {
+            info('get proto');
+          },
+          getLocation: function() {
+            info('get loc');
+          },
+          getUser: function() {
+            info('get user');
+          }
+        }
+      });
+    }
     info('initialized');
 
-    this.puppet.setApp(this)
+    this.puppet.setAdapter(adapter)
   }
-
-  getAdapter(): ThirdPartyAdapter {
-    return this.adapter;
-  }
-
 
   /**
    * Async call to get the status room ID
@@ -50,7 +80,7 @@ export class Base {
    * @params {_roomAliasLocalPart} Optional, the room alias local part
    * @returns {Promise} Promise resolving the Matrix room ID of the status room
    */
-  getStatusRoomId(_roomAliasLocalPart?:string) {
+  private getStatusRoomId(_roomAliasLocalPart?:string) {
     const roomAliasLocalPart = _roomAliasLocalPart || this.config.servicePrefix+"_"+this.config.statusRoomPostfix;
     const roomAlias = "#"+roomAliasLocalPart+":"+this.config.homeserverDomain;
     const puppetClient = this.puppet.getClient();
@@ -119,7 +149,7 @@ export class Base {
    *
    * @returns {Promise} Promise resolving if all joins success
    */
-  joinThirdPartyUsersToStatusRoom(users) {
+  public joinThirdPartyUsersToStatusRoom(users: Array<ContactListUserData>) {
     info("Join %s users to the status room", users.length);
     return this.getStatusRoomId().then(statusRoomId => {
       return Promise.each(users, (user) => {
@@ -141,7 +171,7 @@ export class Base {
    *
    * @returns {Promise}
    */
-  sendStatusMsg(options: StatusMessageOptions, ...args) {
+  public sendStatusMsg(options: StatusMessageOptions, ...args) : Promise<void> {
     if (typeof options !== 'object') {
       throw new Error('sendStatusMsg requires first parameter to be an options object which can be empty.');
     }
@@ -199,19 +229,19 @@ export class Base {
       return Promise.mapSeries(promiseList, p => p());
     });
   }
-  getGhostUserFromThirdPartySenderId(id) {
+  private getGhostUserFromThirdPartySenderId(id) {
     return "@"+this.config.servicePrefix+"_"+id+":"+this.config.homeserverDomain;
   }
-  getRoomAliasFromThirdPartyRoomId(id) {
+  private getRoomAliasFromThirdPartyRoomId(id) {
     return "#"+this.getRoomAliasLocalPartFromThirdPartyRoomId(id)+':'+this.config.homeserverDomain;
   }
-  getThirdPartyUserIdFromMatrixGhostId(matrixGhostId) {
+  private getThirdPartyUserIdFromMatrixGhostId(matrixGhostId) {
     const patt = new RegExp(`^@${this.config.servicePrefix}_(.+)$`);
     const localpart = matrixGhostId.replace(':'+this.config.homeserverDomain, '');
     const matches = localpart.match(patt);
     return matches ? matches[1] : null;
   }
-  getThirdPartyRoomIdFromMatrixRoomId(matrixRoomId) {
+  private getThirdPartyRoomIdFromMatrixRoomId(matrixRoomId) {
     const patt = new RegExp(`^#${this.config.servicePrefix}_(.+)$`);
     const room = this.puppet.getClient().getRoom(matrixRoomId);
     info('reducing array of alases to a 3prid');
@@ -221,7 +251,7 @@ export class Base {
       return matches ? matches[1] : result;
     }, null);
   }
-  getRoomAliasLocalPartFromThirdPartyRoomId(id) {
+  private getRoomAliasLocalPartFromThirdPartyRoomId(id) {
     return this.config.servicePrefix+"_"+id;
   }
 
@@ -234,7 +264,7 @@ export class Base {
    *
    * @returns {Promise} A promise resolving to an Intent
    */
-  getIntentFromThirdPartySenderId(userId, name, avatarUrl) {
+  private getIntentFromThirdPartySenderId(userId: string, name: string, avatarUrl: string) : Promise<Intent> {
     const ghostIntent = this.bridge.getIntent(this.getGhostUserFromThirdPartySenderId(userId));
 
     let promiseList = [];
@@ -247,7 +277,7 @@ export class Base {
     return Promise.all(promiseList).then(() => ghostIntent);
   }
 
-  getIntentFromApplicationServerBot() {
+  private getIntentFromApplicationServerBot() : Intent {
     return this.bridge.getIntent();
   }
 
@@ -260,7 +290,7 @@ export class Base {
    * @param {string} thirdPartyUserId
    * @returns {Promise} A promise resolving to a {RemoteUser}
    */
-  getOrInitRemoteUserStoreDataFromThirdPartyUserId(thirdPartyUserId) {
+  private getOrInitRemoteUserStoreDataFromThirdPartyUserId(thirdPartyUserId: string) : Promise<RemoteUser> {
     const userStore = this.bridge.getUserStore();
     return userStore.getRemoteUser(thirdPartyUserId).then(rUser=>{
       if ( rUser ) {
@@ -284,7 +314,7 @@ export class Base {
     });
   }
 
-  getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId) {
+  private getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId: string) : Promise<string> {
     const roomAlias = this.getRoomAliasFromThirdPartyRoomId(thirdPartyRoomId);
     const roomAliasName = this.getRoomAliasLocalPartFromThirdPartyRoomId(thirdPartyRoomId);
     info('looking up', thirdPartyRoomId);
@@ -358,7 +388,7 @@ export class Base {
    *
    * @returns {Promise} A Promise resolving to the user's client object
    */
-  getUserClient(roomId: string, senderId: string, senderName: string, avatarUrl: string, doNotTryToGetRemoteUserStoreData?:boolean) {
+  private getUserClient(roomId: string, senderId: string, senderName: string, avatarUrl: string, doNotTryToGetRemoteUserStoreData?:boolean) : Promise<MatrixClient> {
     info("get user client for third party user %s (%s)", senderId, senderName);
 
     if (senderId === undefined) {
@@ -391,7 +421,7 @@ export class Base {
   /**
    * Returns a promise
    */
-  handleThirdPartyRoomImageMessage(thirdPartyRoomImageMessageData) {
+  public handleThirdPartyRoomImageMessage(thirdPartyRoomImageMessageData: ThirdPartyImageMessagePayload) : Promise<void> {
     info('handling third party room image message', thirdPartyRoomImageMessageData);
     let {
       roomId,
@@ -477,7 +507,7 @@ export class Base {
   /**
    * Returns a promise
    */
-  handleThirdPartyRoomMessage(thirdPartyRoomMessageData) {
+  public handleThirdPartyRoomMessage(thirdPartyRoomMessageData : ThirdPartyMessagePayload) : Promise<void> {
     info('handling third party room message', thirdPartyRoomMessageData);
     const {
       roomId,
@@ -525,7 +555,7 @@ export class Base {
     });
   }
 
-  public handleMatrixEvent(req, _context) {
+  private handleMatrixEvent(req, _context) {
     const data = req.getData();
     if (data.type === 'm.room.message') {
       info('incoming message. data:', data);
