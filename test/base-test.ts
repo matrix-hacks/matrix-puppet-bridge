@@ -179,6 +179,7 @@ describe("base.handleThirdPartyRoomMessage", () => {
 
     return app.handleThirdPartyRoomMessage(msg).then(()=>{
       expect((<any>ghostIntent).createRoom.callCount).to.equal(1);
+      expect((<any>ghostClient).sendMessage.callCount).to.eq(1);
     });
   })
 
