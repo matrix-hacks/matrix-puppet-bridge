@@ -419,13 +419,13 @@ export class Base implements BaseInterface {
 
         let tag = autoTagger(senderId, this);
 
-        //return this.getStatusRoomId().then((statusRoomId)=>{
-        //  return ghostIntent.join(statusRoomId);
-        //}).then(()=>{
+        return this.getStatusRoomId().then((statusRoomId)=>{
+          return ghostIntent.join(statusRoomId);
+        }).then(()=>{
           return ghostIntent.join(matrixRoomId).then(()=>{
             return <MessageHandler>{ tag, matrixRoomId, ghostIntent }
           });
-        //});
+        });
       });
     });
   }
