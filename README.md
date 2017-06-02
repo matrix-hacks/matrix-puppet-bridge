@@ -1,5 +1,7 @@
 # matrix-puppet-bridge
 
+[![Build Status](https://travis-ci.org/matrix-hacks/matrix-puppet-bridge.svg?branch=master)](https://travis-ci.org/matrix-hacks/matrix-puppet-bridge)
+
 This project provides a base class for a style of Matrix bridge which primarily acts as or "puppets" a specific user (usually yourself) on your homeserver and on a third party service.
 
 There is a common pattern in this style of bridge, such as duplicate message issues, which are dealt with by this module.
