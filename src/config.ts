@@ -30,7 +30,4 @@ export interface Config {
    * something like '#{servicePrefix}_puppetStatusRoom'.
    */
   statusRoomPostfix?: string;
-
-  // Optionally set this to true to allow undefined ghost user names
-  allowNullSenderName?: boolean;
 }

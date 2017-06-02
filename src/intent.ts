@@ -1,10 +1,10 @@
 import { MatrixClient } from './matrix-client';
 
-interface CreateRoomParams {
+export interface CreateRoomParams {
   createAsClient?: boolean;
 }
 
-interface SendMessageParams {
+export interface SendMessageParams {
   body: string;
   formatted_body: string;
   format: string;

@@ -7,7 +7,7 @@ import { BangCommand, parseBangCommand } from './bang-command';
 const urlParse = require('url').parse;
 const inspect = require('util').inspect;
 const path = require('path');
-import { download, autoTagger, isFilenameTagged } from './utils';
+import { download, autoTagger, isFilenameTagged, createUploader } from './utils';
 const fs = require('fs');
 
 import { Puppet } from './puppet';
@@ -30,6 +30,20 @@ import {
 
 import { Image } from './image';
 
+interface PrepareMessageHandlerParams {
+  senderId: string;
+  senderName: string;
+  avatarUrl: string;
+  roomId: string;
+  text: string;
+}
+
+interface MessageHandler {
+  tag(senderId: string): string;
+  matrixRoomId: string;
+  ghostIntent: Intent;
+}
+
 export class Base implements BaseInterface {
   public adapter: ThirdPartyAdapter;
   private deduplicationTag: string;
@@ -38,6 +52,9 @@ export class Base implements BaseInterface {
 
   constructor(private config: Config, adapter: ThirdPartyAdapter, private puppet: Puppet, private bridge?:Bridge) {
     this.config = config;
+    if (!this.config.statusRoomPostfix) {
+      this.config.statusRoomPostfix = "puppetStatusRoom";
+    }
     this.puppet = puppet;
     this.adapter = adapter;
     this.deduplicationTag = this.config.deduplicationTag || this.defaultDeduplicationTag();
@@ -189,6 +206,8 @@ export class Base implements BaseInterface {
       }
     }, '');
 
+    info('sending status message', args);
+
     return this.getStatusRoomId(options.roomAliasLocalPart).then(statusRoomId => {
       var botIntent = this.bridge.getIntent();
       if (botIntent === null) {
@@ -264,17 +283,30 @@ export class Base implements BaseInterface {
    *
    * @returns {Promise} A promise resolving to an Intent
    */
-  private getIntentFromThirdPartySenderId(userId: string, name: string, avatarUrl: string) : Promise<Intent> {
+  private getIntentFromThirdPartySenderId(userId: string, name?: string, avatarUrl?: string) : Promise<Intent> {
     const ghostIntent = this.bridge.getIntent(this.getGhostUserFromThirdPartySenderId(userId));
 
     let promiseList = [];
-    if (name)
+
+    if (name) {
       promiseList.push(ghostIntent.setDisplayName(name));
+    } else {
+      promiseList.push(this.getOrInitRemoteUserStoreDataFromThirdPartyUserId(userId).then((remoteUser)=>{
+        return ghostIntent.setDisplayName(remoteUser.get('senderName'));
+      }))
+    }
 
-    if (avatarUrl)
+    if (avatarUrl) {
       promiseList.push(this.setGhostAvatar(ghostIntent, avatarUrl));
+    } else {
+      promiseList.push(this.getOrInitRemoteUserStoreDataFromThirdPartyUserId(userId).then((remoteUser)=>{
+        return ghostIntent.setDisplayName(remoteUser.get('avatarUrl'));
+      }))
+    }
 
-    return Promise.all(promiseList).then(() => ghostIntent);
+    return Promise.all(promiseList).then(() => {
+      return ghostIntent;
+    });
   }
 
   private getIntentFromApplicationServerBot() : Intent {
@@ -314,7 +346,7 @@ export class Base implements BaseInterface {
     });
   }
 
-  private getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId: string) : Promise<string> {
+  private getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId: string, intent: Intent) : Promise<string> {
     const roomAlias = this.getRoomAliasFromThirdPartyRoomId(thirdPartyRoomId);
     const roomAliasName = this.getRoomAliasLocalPartFromThirdPartyRoomId(thirdPartyRoomId);
     info('looking up', thirdPartyRoomId);
@@ -344,7 +376,7 @@ export class Base implements BaseInterface {
         info("got 3p room data", thirdPartyRoomData);
         const { name, topic } = thirdPartyRoomData;
         info("creating room !!!!", ">>>>"+roomAliasName+"<<<<", name, topic);
-        return botIntent.createRoom({
+        return intent.createRoom({
           createAsClient: true, // bot won't auto-join the room in this case
           options: {
             name, topic, room_alias_name: roomAliasName
@@ -364,7 +396,7 @@ export class Base implements BaseInterface {
           warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
           return botClient.deleteAlias(roomAlias).then(()=>{
             warn('deleted alias... trying again to get or create room.');
-            return this.getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId);
+            return this.getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId, intent);
           });
         } else {
           warn("ignoring error from puppet join room: ", err.message);
@@ -377,45 +409,25 @@ export class Base implements BaseInterface {
     });
   }
 
-  /**
-   * Get the client object for a user, either third party user or us.
-   *
-   * @param {string} roomId The room the user must join ID
-   * @param {string} senderId The user's ID
-   * @param {string} senderName The user's name
-   * @param {string} avatarUrl A resource on the public web
-   * @param {boolean} doNoTryToGetRemoteUsersStoreData Private parameter to prevent infinite loop
-   *
-   * @returns {Promise} A Promise resolving to the user's client object
-   */
-  private getUserClient(roomId: string, senderId: string, senderName: string, avatarUrl: string, doNotTryToGetRemoteUserStoreData?:boolean) : Promise<MatrixClient> {
-    info("get user client for third party user %s (%s)", senderId, senderName);
+  private prepareMessageHandler(params : PrepareMessageHandlerParams) : Promise<MessageHandler> {
+    const { text, senderId, senderName, avatarUrl, roomId } = params;
+    return this.getIntentFromThirdPartySenderId(senderId, senderName, avatarUrl).then(ghostIntent=>{
+      return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId, ghostIntent).then((matrixRoomId) => {
+        if (senderId === undefined && this.isTaggedMatrixMessage(text)) {
+          return;
+        }
 
-    if (senderId === undefined) {
-      return Promise.resolve(this.puppet.getClient());
-    } else {
-      if (!senderName && !this.config.allowNullSenderName) {
-        if (doNotTryToGetRemoteUserStoreData)
-          throw new Error('preventing an endless loop');
+        let tag = autoTagger(senderId, this);
 
-        info("no senderName provided with payload, will check store");
-        return this.getOrInitRemoteUserStoreDataFromThirdPartyUserId(senderId).then((remoteUser)=>{
-          info("got remote user from store, with a possible client API call in there somewhere", remoteUser);
-          info("will retry now");
-          const senderName = remoteUser.get('senderName');
-          return this.getUserClient(roomId, senderId, senderName, avatarUrl, true);
-        });
-      }
-
-      info("this message was not sent by me");
-      return this.getIntentFromThirdPartySenderId(senderId, senderName, avatarUrl)
-        .then((ghostIntent) => {
-          return this.getStatusRoomId()
-            .then(statusRoomId => ghostIntent.join(statusRoomId))
-            .then(() => ghostIntent.join(roomId))
-            .then(() => ghostIntent.getClient());
-        });
-    }
+        //return this.getStatusRoomId().then((statusRoomId)=>{
+        //  return ghostIntent.join(statusRoomId);
+        //}).then(()=>{
+          return ghostIntent.join(matrixRoomId).then(()=>{
+            return <MessageHandler>{ tag, matrixRoomId, ghostIntent }
+          });
+        //});
+      });
+    });
   }
 
   /**
@@ -424,83 +436,53 @@ export class Base implements BaseInterface {
   public handleThirdPartyRoomImageMessage(thirdPartyRoomImageMessageData: ThirdPartyImageMessagePayload) : Promise<void> {
     info('handling third party room image message', thirdPartyRoomImageMessageData);
     let {
-      roomId,
-      senderName,
-      senderId,
-      avatarUrl,
-      text,
+      text, senderId, senderName, avatarUrl, roomId,
       url, path, buffer, // either one is fine
       h,
       w,
       mimetype
     } = thirdPartyRoomImageMessageData;
 
-    return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((matrixRoomId) => {
-      return this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl).then((client) => {
+    const prep : PrepareMessageHandlerParams = {
+      text, senderId, senderName, avatarUrl, roomId
+    };
 
-        if (senderId === undefined) {
-          info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
-          info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
-          info("if it came from a matrix client, then it's already in the client, sending again would dupe");
-          info("we use a tag on the end of messages to determine if it came from matrix");
+    return this.prepareMessageHandler(prep).then(handler=>{
+      const { tag, matrixRoomId, ghostIntent } = handler;
+      const { upload } = createUploader(ghostIntent.getClient(), text, mimetype);
 
-          if (this.isTaggedMatrixMessage(text) || isFilenameTagged(path)) {
-            info('it is from matrix, so just ignore it.');
-            return;
-          } else {
-            info('it is from 3rd party client');
-          }
-        }
-
-        let upload = (buffer, opts={})=>{
-          return client.uploadContent(buffer, {
-            name: text,
-            type: mimetype,
-            rawResponse: false,
-            ...opts
-          }).then((res)=>{
-            return {
-              content_uri: res.content_uri || res,
-              size: buffer.length
-            };
+      let promise;
+      if ( url ) {
+        promise = ()=> {
+          return download.getBufferAndType(url).then(({buffer,type}) => {
+            return upload(buffer, { type: mimetype || type });
           });
         };
+      } else if ( path ) {
+        promise = () => {
+          return Promise.promisify(fs.readFile)(path).then(buffer => {
+            return upload(buffer);
+          });
+        };
+      } else if ( buffer ) {
+        promise = () => upload(buffer);
+      } else {
+        promise = Promise.reject(new Error('missing url or path'));
+      }
 
-        let promise;
-        if ( url ) {
-          promise = ()=> {
-            return download.getBufferAndType(url).then(({buffer,type}) => {
-              return upload(buffer, { type: mimetype || type });
-            });
-          };
-        } else if ( path ) {
-          promise = () => {
-            return Promise.promisify(fs.readFile)(path).then(buffer => {
-              return upload(buffer);
-            });
-          };
-        } else if ( buffer ) {
-          promise = () => upload(buffer);
-        } else {
-          promise = Promise.reject(new Error('missing url or path'));
-        }
+      promise().then(({ content_uri, size }) => {
+        info('uploaded to', content_uri);
+        let msg = tag(text);
+        let opts = { mimetype, h, w, size };
+        return ghostIntent.getClient().sendImageMessage(matrixRoomId, content_uri, opts, msg);
+      }, (err) =>{
+        warn('upload error', err);
 
-        const tag = autoTagger(senderId, this);
-
-        promise().then(({ content_uri, size }) => {
-          info('uploaded to', content_uri);
-          let msg = tag(text);
-          let opts = { mimetype, h, w, size };
-          return client.sendImageMessage(matrixRoomId, content_uri, opts, msg);
-        }, (err) =>{
-          warn('upload error', err);
-
-          let opts = {
-            body: tag(url || path || text),
-            msgtype: "m.text"
-          };
-          return client.sendMessage(matrixRoomId, opts);
-        });
+        let opts = {
+          body: tag(url || path || text),
+          msgtype: "m.text"
+        };
+        return ghostIntent.getClient().sendMessage(matrixRoomId, opts);
       });
     });
   }
@@ -510,46 +492,27 @@ export class Base implements BaseInterface {
   public handleThirdPartyRoomMessage(thirdPartyRoomMessageData : ThirdPartyMessagePayload) : Promise<void> {
     info('handling third party room message', thirdPartyRoomMessageData);
     const {
-      roomId,
-      senderName,
-      senderId,
-      avatarUrl,
-      text,
+      text, senderId, senderName, avatarUrl, roomId,
       html
     } = thirdPartyRoomMessageData;
-
-    return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((matrixRoomId) => {
-      return this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl).then((client) => {
-        if (senderId === undefined) {
-          info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
-          info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
-          info("if it came from a matrix client, then it's already in the client, sending again would dupe");
-          info("we use a tag on the end of messages to determine if it came from matrix");
-
-          if (this.isTaggedMatrixMessage(text)) {
-            info('it is from matrix, so just ignore it.');
-            return;
-          } else {
-            info('it is from 3rd party client');
-          }
-        }
-
-        let tag = autoTagger(senderId, this);
-
-        if (html) {
-          return client.sendMessage(matrixRoomId, {
-            body: tag(text),
-            formatted_body: html,
-            format: "org.matrix.custom.html",
-            msgtype: "m.text"
-          });
-        } else {
-          return client.sendMessage(matrixRoomId, {
-            body: tag(text),
-            msgtype: "m.text"
-          });
-        }
-      });
+    const prep : PrepareMessageHandlerParams = {
+      text, senderId, senderName, avatarUrl, roomId
+    }
+    return this.prepareMessageHandler(prep).then(handler=>{
+      const { tag, matrixRoomId, ghostIntent } = handler;
+      if (html) {
+        return ghostIntent.getClient().sendMessage(matrixRoomId, {
+          body: tag(text),
+          formatted_body: html,
+          format: "org.matrix.custom.html",
+          msgtype: "m.text"
+        });
+      } else {
+        return ghostIntent.getClient().sendMessage(matrixRoomId, {
+          body: tag(text),
+          msgtype: "m.text"
+        });
+      }
     }).catch(err=>{
       this.sendStatusMsg({}, err, thirdPartyRoomMessageData);
     });

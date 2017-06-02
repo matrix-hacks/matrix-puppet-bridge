@@ -1,7 +1,7 @@
 {
   "name": "matrix-puppet-bridge",
   "version": "1.15.1",
-  "description": "facilitates writing a certain kind of matrix bridge",
+  "description": "Helps you write puppet-style bridges for Matrix",
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
   "scripts": {
@@ -20,7 +20,7 @@
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "https://github.com/AndrewJDR/matrix-puppet-bridge.git"
+    "url": "https://github.com/matrix-hacks/matrix-puppet-bridge.git"
   },
   "dependencies": {
     "bluebird": "^3.4.6",

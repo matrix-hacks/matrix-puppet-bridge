@@ -6,6 +6,8 @@ const urlParse = require('url').parse;
 const fs = require('fs');
 const tmp = require('tmp');
 
+import { MatrixClient, UploadResponse } from './matrix-client';
+
 const downloadGetStream = url => needle.get(url);
 
 const downloadGetBuffer = url => {
@@ -69,6 +71,24 @@ export const autoTagger = (senderId, self) => (text='') => {
   }
   return out;
 };
+
+export const createUploader = (client : MatrixClient, name: string, type?: string) => {
+  return {
+    upload: (buffer : Buffer, opts={})=>{
+      return client.uploadContent(buffer, {
+        name, type,
+        rawResponse: false,
+        ...opts
+      }).then((res)=>{
+        return {
+          content_uri: res.content_uri || res,
+          size: buffer.length
+        };
+      });
+    }
+  }
+}
+  
 
 export const download = {
   getStream: downloadGetStream,
