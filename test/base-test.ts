@@ -66,8 +66,13 @@ describe("base.handleThirdPartyRoomMessage", () => {
     }
   }
 
+  const throwStatusRoomErrors = (app) => {
+    stub(app, 'sendStatusMsg').callsFake(({},err)=>{
+      if (err && err.stack) { throw err }
+    });
+  }
+
   before(()=>{
-    adapter = <ThirdPartyAdapter>{};
     puppet = new Puppet('');
     puppetClient = makeClient(puppetMxid);
     stub(puppet, 'getClient').returns(puppetClient);
@@ -79,12 +84,11 @@ describe("base.handleThirdPartyRoomMessage", () => {
     puppetClient.getRoomIdForAlias.withArgs(mirrorRoomAlias).resolves({ room_id: "mxMirrorRoom" });
     puppetClient.getRoomIdForAlias.withArgs(statusRoomAlias).resolves({ room_id: "mxStatusRoom" });
 
-    let app = new Base(config, adapter, puppet);
+    let app = new Base(config, <ThirdPartyAdapter>{}, puppet);
 
     stub(app, 'setGhostAvatar').resolves();
-    stub(app, 'sendStatusMsg').callsFake(({},err)=>{
-      if (err && err.stack) { throw err }
-    });
+
+    throwStatusRoomErrors(app);
 
     let getIntentStub = stub((<any>app).bridge, 'getIntent');
 
@@ -103,59 +107,79 @@ describe("base.handleThirdPartyRoomMessage", () => {
 
     return app.handleThirdPartyRoomMessage(msg).then(()=>{
       expect(puppetClient.getRoomIdForAlias.callCount).to.eq(2);
-      (<any>app).bridge.getIntent.restore();
     });
   });
 
 
-  it.skip("has the AS bot create the status room", ()=>{
-    let puppetGetRoomIdForAlias = stub(puppetClient, 'getRoomIdForAlias');
-    puppetGetRoomIdForAlias.withArgs(mirrorRoomAlias).resolves({ room_id: "mxMirrorRoom" });
-    puppetGetRoomIdForAlias.withArgs(statusRoomAlias).onCall(0).rejects();
-    puppetGetRoomIdForAlias.withArgs(statusRoomAlias).onCall(1).resolves({ room_id: "mxStatusRoom" });
+  it("uses the AS bot create the status room", ()=>{
+    puppetClient.getRoomIdForAlias = stub();
+    puppetClient.joinRoom = stub().resolves();
+    puppetClient.getRoomIdForAlias.withArgs(mirrorRoomAlias).resolves({ room_id: "mxMirrorRoom" });
+    puppetClient.getRoomIdForAlias.withArgs(statusRoomAlias).onCall(0).rejects();
+    puppetClient.getRoomIdForAlias.withArgs(statusRoomAlias).onCall(1).resolves({ room_id: "mxStatusRoom" });
 
-    let app = new Base(config, adapter, puppet);
+    let app = new Base(config, <ThirdPartyAdapter>{}, puppet);
 
-    let bridgeGetIntentStub = stub((<any>app).bridge, 'getIntent');
+    stub(app, 'setGhostAvatar').resolves();
 
-    let botIntentCreateRoomStub = stub(<any>botIntent, 'createRoom');
-    botIntentCreateRoomStub.resolves({ room_id: 'mxStatusRoom' });
+    throwStatusRoomErrors(app);
 
-    bridgeGetIntentStub.withArgs().returns(botIntent);
+    let getIntentStub = stub((<any>app).bridge, 'getIntent');
 
-    return app.handleThirdPartyRoomMessage(msg).then(() => {
-      expect(puppetGetRoomIdForAlias.callCount).to.eq(2);
-      console.log(bridgeGetIntentStub.getCall(2).args[0]);
-      expect(botIntentCreateRoomStub.callCount).to.eq(1);
-      puppetGetRoomIdForAlias.restore();
-      botIntentCreateRoomStub.restore();
-      bridgeGetIntentStub.restore();
+    let botIntent = makeIntent(puppetMxid);
+    botIntent.setDisplayName = stub().resolves();
+    botIntent.setPowerLevel = stub().resolves();
+    botIntent.createRoom = stub().resolves({ room_id: 'mxStatusRoom' });
+    getIntentStub.withArgs().returns(botIntent);
+
+    let ghostIntent = makeIntent(ghostMxid);
+    ghostIntent.setDisplayName = stub().resolves();
+    ghostIntent.join = stub().resolves();
+
+    let ghostClient = ghostIntent.getClient();
+    ghostClient.sendMessage = stub().resolves();
+    getIntentStub.withArgs(ghostMxid).returns(ghostIntent);
+
+    return app.handleThirdPartyRoomMessage(msg).then(()=>{
+      expect((<any>botIntent).createRoom.callCount).to.equal(1);
     });
-
   })
 
-  it.skip("has the AS ghost user create the mirror room and send the message", ()=>{
-    let puppetGetRoomIdForAlias = stub(puppetClient, 'getRoomIdForAlias');
-    puppetGetRoomIdForAlias.withArgs(statusRoomAlias).resolves({ room_id: "mxStatusRoom" });
-    puppetGetRoomIdForAlias.withArgs(mirrorRoomAlias).onCall(0).rejects();
-    puppetGetRoomIdForAlias.withArgs(mirrorRoomAlias).onCall(1).resolves({ room_id: "mxMirrorRoom" });
+  it("has the AS ghost user create the mirror room and send the message", ()=>{
+    puppetClient.getRoomIdForAlias = stub();
+    puppetClient.joinRoom = stub().resolves();
+    puppetClient.getRoomIdForAlias.withArgs(statusRoomAlias).resolves({ room_id: "mxStatusRoom" });
+    puppetClient.getRoomIdForAlias.withArgs(mirrorRoomAlias).onCall(0).rejects();
+    puppetClient.getRoomIdForAlias.withArgs(mirrorRoomAlias).onCall(1).resolves({ room_id: "mxMirrorRoom" });
+
+    let adapter = <ThirdPartyAdapter>{};
+    adapter.getRoomData = stub().resolves({ name: 'General Chat', topic: "For general discussion" })
 
     let app = new Base(config, adapter, puppet);
 
-    let bridgeGetIntentStub = stub((<any>app).bridge, 'getIntent');
+    stub(app, 'setGhostAvatar').resolves();
 
-    let botIntentCreateRoomStub = stub(<any>botIntent, 'createRoom');
+    throwStatusRoomErrors(app);
 
-    bridgeGetIntentStub.withArgs().returns(botIntent);
-     
-    return app.handleThirdPartyRoomMessage(msg).then(() => {
-      expect(puppetGetRoomIdForAlias.callCount).to.eq(2);
-      expect(botIntentCreateRoomStub.callCount).to.eq(0);
-      console.log(bridgeGetIntentStub.getCall(1).args);
-      puppetGetRoomIdForAlias.restore();
-      bridgeGetIntentStub.restore();
+    let getIntentStub = stub((<any>app).bridge, 'getIntent');
+
+    let botIntent = makeIntent(puppetMxid);
+    botIntent.setDisplayName = stub().resolves();
+    botIntent.setPowerLevel = stub().resolves();
+    getIntentStub.withArgs().returns(botIntent);
+
+    let ghostIntent = makeIntent(ghostMxid);
+    ghostIntent.setDisplayName = stub().resolves();
+    ghostIntent.join = stub().resolves();
+    ghostIntent.createRoom = stub().resolves({ room_id: 'mxMirrorRoom' });
+
+    let ghostClient = ghostIntent.getClient();
+    ghostClient.sendMessage = stub().resolves();
+    getIntentStub.withArgs(ghostMxid).returns(ghostIntent);
+
+    return app.handleThirdPartyRoomMessage(msg).then(()=>{
+      expect((<any>ghostIntent).createRoom.callCount).to.equal(1);
     });
-
   })
 
 })
