@@ -1,6 +1,6 @@
 {
   "name": "matrix-puppet-bridge",
-  "version": "1.15.1",
+  "version": "2.0.0",
   "description": "Helps you write puppet-style bridges for Matrix",
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",

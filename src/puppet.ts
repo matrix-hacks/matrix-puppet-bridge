@@ -1,55 +1,107 @@
 const Promise = require('bluebird');
 const matrixSdk = require("matrix-js-sdk");
-const fs = require('fs');
-const readFile = Promise.promisify(fs.readFile);
-const writeFile = Promise.promisify(fs.writeFile);
-const read = Promise.promisify(require('read'));
-const whyPuppeting = 'http://bit.ly/2r59S0m';
-
-const readConfigFile = (jsonFile: string) => {
-  return readFile(jsonFile).then(buffer => {
-    return JSON.parse(buffer);
-  });
-};
 
 import { MatrixClient } from './matrix-client';
 import { ThirdPartyAdapter } from './third-party-adapter';
+import { Config, IdentityPair, PuppetIdentity, readConfigFile, findIdentityPair } from './config';
+import { associateToken, TokenAssociationParams } from './associate-token';
 
+export interface PuppetConfigLoadParams {
+  config?: Config;
+  jsonFile?: string;
+}
 /**
  * Puppet class
  */
 export class Puppet {
-  id: string;
+  userId: string;
   client: MatrixClient;
+  private identityPairId: string;
+  private configLoadStrat: PuppetConfigLoadParams;
+
+  private config : Config;
+  private identityPair: IdentityPair;
+  private identity: PuppetIdentity;
+  private homeserverUrl: string;
   private thirdPartyRooms: any;
   private adapter: ThirdPartyAdapter;
   private matrixRoomMembers: any;
 
   /**
    * Constructs a Puppet
-   *
-   * @param {string} jsonFile path to JSON config file
    */
-  constructor(public jsonFile: string) {
-    this.id = null;
-    this.client = null;
-    this.thirdPartyRooms = {};
-    this.adapter = null;
+  constructor(identityPairId: string, configLoadStrat: PuppetConfigLoadParams) {
+    this.identityPairId = identityPairId;
+    this.configLoadStrat = configLoadStrat;
+    this.config = null;
   }
 
   /**
    * Reads the config file, creates a matrix client, connects, and waits for sync
    *
-   * @returns {Promise} Returns a promise resolving the MatrixClient
+   * @returns {Promise} Returns a promise
    */
-  startClient() {
-    return readConfigFile(this.jsonFile).then(config => {
-      this.id = config.puppet.id;
-      return matrixSdk.createClient({
-        baseUrl: config.bridge.homeserverUrl,
-        userId: config.puppet.id,
-        accessToken: config.puppet.token
+  public startClient(config?: Config) {
+
+    // load config
+    if (config) {
+      this.config = config;
+    } else if (this.configLoadStrat.jsonFile) {
+      return readConfigFile(this.configLoadStrat.jsonFile).then(config=> {
+        return this.startClient(config);
+      })
+    } else if (this.configLoadStrat.config) {
+      return this.startClient(this.configLoadStrat.config);
+    } else {
+      console.error(`Unable to load puppet configuration!`);
+      process.exit(1);
+    }
+    // end config load
+
+    // load identity
+    this.identityPair = findIdentityPair(this.config, this.identityPairId);
+    this.identity = this.identityPair.matrixPuppet;
+    if ( this.identityPair && this.identity ) {
+      this.userId = "@"+this.identity.localpart+":"+config.homeserverDomain;
+      this.homeserverUrl = config.homeserverUrl;
+      this.client = null;
+      this.thirdPartyRooms = {};
+      this.adapter = null;
+    } else {
+      console.error(`No matrix puppet identity found (looked for an identity pair with id: '${this.identityPairId}'`);
+      process.exit(1);
+    }
+    // end load identity
+
+    // load token
+    if (this.identity.token) {
+      return this.login(this.identity.token);
+    } else if (this.identity.password) {
+      let matrixClient = matrixSdk.createClient(this.homeserverUrl);
+      return matrixClient.loginWithPassword(this.userId, this.identity.password).then(accessDat => {
+        if (this.configLoadStrat.jsonFile) {
+          return associateToken({
+            identityPairId: this.identityPairId,
+            jsonFile: this.configLoadStrat.jsonFile,
+            token: accessDat.access_token
+          }).then(()=>{
+            return this.login(accessDat.access_token);
+          });
+        } else {
+          return this.login(accessDat.access_token);
+        }
       });
+    } else {
+      console.error(`Matrix puppet '${this.identityPairId}' must have a 'token' or 'password' to login`);
+      process.exit(1);
+    }
+  }
+
+  private login(token: string) : Promise<void> {
+    return matrixSdk.createClient({
+      baseUrl: this.homeserverUrl,
+      userId: this.userId,
+      accessToken: this.identity.token
     }).then(_matrixClient => {
       this.client = _matrixClient;
       this.client.startClient();
@@ -65,7 +117,7 @@ export class Puppet {
               let content = event.getContent();
               for (var eventId in content) {
                 for (var userId in content[eventId]['m.read']) {
-                  if (userId === this.id) {
+                  if (userId === this.userId) {
                     console.log("Receive a read event from ourself");
                     return this.adapter.sendReadReceipt(this.thirdPartyRooms[room.roomId]);
                   }
@@ -104,43 +156,6 @@ export class Puppet {
     return this.client;
   }
 
-  /**
-   * Prompts user for credentials and updates the puppet section of the config
-   *
-   * @returns {Promise}
-   */
-  associate() {
-    return readConfigFile(this.jsonFile).then(config => {
-      console.log([
-        'This bridge performs matrix user puppeting.',
-        'This means that the bridge logs in as your user and acts on your behalf',
-        'For the rationale, see '+whyPuppeting
-      ].join('\n'));
-      console.log("Enter your user's localpart");
-      return read({ silent: false }).then(localpart => {
-        let id = '@'+localpart+':'+config.bridge.domain;
-        console.log("Enter password for "+id);
-        return read({ silent: true, replace: '*' }).then(password => {
-          return { localpart, id, password };
-        });
-      }).then(({localpart, id, password}) => {
-        let matrixClient = matrixSdk.createClient(config.bridge.homeserverUrl);
-        return matrixClient.loginWithPassword(id, password).then(accessDat => {
-          console.log("log in success");
-          return writeFile(this.jsonFile, JSON.stringify({
-            ...config, 
-            puppet: {
-              id,
-              localpart, 
-              token: accessDat.access_token
-            }
-          }), null, 2).then(()=>{
-            console.log('Updated config file '+this.jsonFile);
-          });
-        });
-      });
-    });
-  }
 
   /**
    * Save a third party room id

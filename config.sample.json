@@ -1,6 +1,0 @@
-{
-  "port": 8090,
-  "homeserverDomain": "dev.synapse.mdks.org",
-  "homeserverUrl":"https://dev.synapse.mdks.org",
-  "registrationPath": "registration.yaml"
-}

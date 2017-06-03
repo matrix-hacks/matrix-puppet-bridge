@@ -11,20 +11,25 @@ import { Bridge } from 'matrix-appservice-bridge';
 import { Intent } from '../src/intent';
 import { Credentials, MatrixClient } from '../src/matrix-client';
 
-let config = <Config>{
-  servicePrefix: "facebook",
+let config : Config = {
   serviceName: "Facebook",
+  servicePrefix: "facebook",
   port: 8090,
   homeserverDomain: "dev.synapse.mdks.org",
   homeserverUrl:"https://dev.synapse.mdks.org",
   registrationPath: "registration.yaml",
-  statusRoomPostfix: "puppetStatusRoom"
+  statusRoomPostfix: "puppetStatusRoom",
+  identityPairs: [{
+    id: "a",
+    matrixPuppet: { localpart: 'puppet' },
+    thirdParty: {},
+  }]
 }
 
 
 describe("Base constructor", () =>{
   let adapter = <ThirdPartyAdapter>{};
-  let puppet = new Puppet('');
+  let puppet = new Puppet(config.identityPairs[0].matrixPuppet, config.homeserverDomain);
 
   it("sets puppet.adapter", () => {
     let app = new Base(config, adapter, puppet);
@@ -48,7 +53,7 @@ describe("base.handleThirdPartyRoomMessage", () => {
   let puppetClient;
   let botIntent;
   const msg = <ThirdPartyMessagePayload>{ roomId: 'general', senderId: 'alice', senderName: "Alice", text: 'hello', avatarUrl: 'avatar' };
-  const puppetMxid = `@puppet:${config.homeserverDomain}`;
+  const puppetMxid = `@${config.identityPairs[0].matrixPuppet.localpart}:${config.homeserverDomain}`;
   const ghostMxid = `@${config.servicePrefix}_${msg.senderId}:${config.homeserverDomain}`;
   const mirrorRoomAlias = `#${config.servicePrefix}_${msg.roomId}:${config.homeserverDomain}`;
   const statusRoomAlias = `#${config.servicePrefix}_${config.statusRoomPostfix}:${config.homeserverDomain}`;
@@ -73,7 +78,7 @@ describe("base.handleThirdPartyRoomMessage", () => {
   }
 
   before(()=>{
-    puppet = new Puppet('');
+    puppet = new Puppet(config.identityPairs[0].matrixPuppet, config.homeserverDomain);
     puppetClient = makeClient(puppetMxid);
     stub(puppet, 'getClient').returns(puppetClient);
   });

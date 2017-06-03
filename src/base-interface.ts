@@ -10,6 +10,8 @@ export interface StatusMessageOptions {
   roomAliasLocalPart?: string;
 }
 
+// This is the public interface of the base class; it's
+// written here in a concise way so you don't need to look the actual implementation file.
 export interface BaseInterface {
   joinThirdPartyUsersToStatusRoom(users: Array<ContactListUserData>) : Promise<void>;
   sendStatusMsg(options: StatusMessageOptions, ...args) : Promise<void>;
