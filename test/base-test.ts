@@ -29,7 +29,7 @@ let config : Config = {
 
 describe("Base constructor", () =>{
   let adapter = <ThirdPartyAdapter>{};
-  let puppet = new Puppet(config.identityPairs[0].matrixPuppet, config.homeserverDomain);
+  let puppet = new Puppet(config.identityPairs[0].id, config.homeserverDomain);
 
   it("sets puppet.adapter", () => {
     let app = new Base(config, adapter, puppet);
@@ -78,7 +78,7 @@ describe("base.handleThirdPartyRoomMessage", () => {
   }
 
   before(()=>{
-    puppet = new Puppet(config.identityPairs[0].matrixPuppet, config.homeserverDomain);
+    puppet = new Puppet(config.identityPairs[0].id, config.homeserverDomain);
     puppetClient = makeClient(puppetMxid);
     stub(puppet, 'getClient').returns(puppetClient);
   });

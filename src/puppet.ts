@@ -34,6 +34,9 @@ export class Puppet {
     this.identityPairId = identityPairId;
     this.configLoadStrat = configLoadStrat;
     this.config = null;
+    this.client = null;
+    this.thirdPartyRooms = {};
+    this.adapter = null;
   }
 
   /**
@@ -46,6 +49,7 @@ export class Puppet {
     // load config
     if (config) {
       this.config = config;
+      this.homeserverUrl = config.homeserverUrl;
     } else if (this.configLoadStrat.jsonFile) {
       return readConfigFile(this.configLoadStrat.jsonFile).then(config=> {
         return this.startClient(config);
@@ -63,10 +67,6 @@ export class Puppet {
     this.identity = this.identityPair.matrixPuppet;
     if ( this.identityPair && this.identity ) {
       this.userId = "@"+this.identity.localpart+":"+config.homeserverDomain;
-      this.homeserverUrl = config.homeserverUrl;
-      this.client = null;
-      this.thirdPartyRooms = {};
-      this.adapter = null;
     } else {
       console.error(`No matrix puppet identity found (looked for an identity pair with id: '${this.identityPairId}'`);
       process.exit(1);
