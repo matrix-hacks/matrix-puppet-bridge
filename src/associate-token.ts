@@ -23,7 +23,6 @@ export const associateToken = (params: TokenAssociationParams) => {
 
   return readConfigFile(jsonFile).then(config => {
     if ( params.token ) {
-
       return updateToken(config, {
         identityPairId,
         token: params.token,
@@ -51,12 +50,18 @@ export const updateToken = (config : Config, params : TokenAssociationParams) =>
   const { identityPairId, jsonFile } = params;
   const updatedIdentityPairs : IdentityPair[] =  config.identityPairs.map(pair=>{
     if (pair.id === identityPairId)
-      return { ...pair, token: params.token };
+      return {
+        ...pair,
+        matrixPuppet: {
+          localpart: pair.matrixPuppet.localpart,
+          token: params.token
+        }
+      };
     return pair;
   });
 
   let updatedConfig : Config = { ...config, identityPairs: updatedIdentityPairs }
-  return writeFile(jsonFile, JSON.stringify(updatedConfig), null, 2).then(()=>{
+  return writeFile(jsonFile, JSON.stringify(updatedConfig, null, 2)).then(()=>{
     console.log('Updated config file '+jsonFile);
   });
 }

@@ -1,5 +1,6 @@
 import { BangCommand } from './bang-command';
 import { Image } from './image';
+import { IdentityPair } from './identity-pair';
 
 export interface ThirdPartyMessagePayload {
   roomId: string;
@@ -30,8 +31,9 @@ export interface ContactListUserData {
   avatarUrl: string;
 }
 
-export interface BasicUserData {
+export interface UserData {
   name: string;
+  avatarUrl?: string;
 }
 
 export interface RoomData {
@@ -40,6 +42,10 @@ export interface RoomData {
 }
 
 export interface ThirdPartyAdapter {
+  /**
+   * Start the client and return a promise indicating success or failure
+   */
+  startClient(): Promise<void>;
   /**
    * Implement how a text-based message is sent over the third party network
    */
@@ -63,7 +69,7 @@ export interface ThirdPartyAdapter {
   /**
    * Optional async call to get additional data about the third party user, for when this information does not arrive in the original payload
    */
-  getUserData?(thirdPartyUserId: string): Promise<BasicUserData>;
+  getUserData?(thirdPartyUserId: string): Promise<UserData>;
 
   handleMatrixUserBangCommand?(cmd: BangCommand, data: object): Promise<void>;
 }

@@ -19,4 +19,6 @@ export interface Intent {
   join(roomId: string): Promise<void>;
   sendMessage(roomId: string, SendMessageParams): Promise<void>;
   setDisplayName(name: string): Promise<void>;
+  leave(roomId: string): Promise<void>;
+  setRoomAvatar(roomId: string, mxContentUri: string): Promise<void>;
 }

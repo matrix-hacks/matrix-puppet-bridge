@@ -97,3 +97,14 @@ export const download = {
   getBufferAndType: downloadGetBufferAndType,
   getTempfile: downloadGetTempfile,
 }
+
+const localdiskGetBufferAndType = (localpath: string) : Promise<{buffer: Buffer, type:string}> => {
+  return Promise.promisify(fs.readFile)(localpath).then(buffer=>{
+    return { buffer, type: mime.lookup(localpath) };
+  });
+};
+
+
+export const localdisk = {
+  getBufferAndType: localdiskGetBufferAndType,
+}

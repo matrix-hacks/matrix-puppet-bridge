@@ -45,7 +45,6 @@ export class Puppet {
    * @returns {Promise} Returns a promise
    */
   public startClient(config?: Config) {
-
     // load config
     if (config) {
       this.config = config;
@@ -98,41 +97,39 @@ export class Puppet {
   }
 
   private login(token: string) : Promise<void> {
-    return matrixSdk.createClient({
+    this.client = matrixSdk.createClient({
       baseUrl: this.homeserverUrl,
       userId: this.userId,
-      accessToken: this.identity.token
-    }).then(_matrixClient => {
-      this.client = _matrixClient;
-      this.client.startClient();
-      return new Promise((resolve, _reject) => {
-        this.matrixRoomMembers = {};
-        this.client.on("RoomState.members", (event, state, _member) => {
-          this.matrixRoomMembers[state.roomId] = Object.keys(state.members);
-        });
+      accessToken: token
+    })
+    this.client.startClient();
+    return new Promise((resolve, _reject) => {
+      this.matrixRoomMembers = {};
+      this.client.on("RoomState.members", (event, state, _member) => {
+        this.matrixRoomMembers[state.roomId] = Object.keys(state.members);
+      });
 
-        this.client.on("Room.receipt", (event, room) => {
-          if (this.adapter && this.adapter.sendReadReceipt) {
-            if (room.roomId in this.thirdPartyRooms) {
-              let content = event.getContent();
-              for (var eventId in content) {
-                for (var userId in content[eventId]['m.read']) {
-                  if (userId === this.userId) {
-                    console.log("Receive a read event from ourself");
-                    return this.adapter.sendReadReceipt(this.thirdPartyRooms[room.roomId]);
-                  }
+      this.client.on("Room.receipt", (event, room) => {
+        if (this.adapter && this.adapter.sendReadReceipt) {
+          if (room.roomId in this.thirdPartyRooms) {
+            let content = event.getContent();
+            for (var eventId in content) {
+              for (var userId in content[eventId]['m.read']) {
+                if (userId === this.userId) {
+                  console.log("Receive a read event from ourself");
+                  return this.adapter.sendReadReceipt(this.thirdPartyRooms[room.roomId]);
                 }
               }
             }
           }
-        });
+        }
+      });
 
-        this.client.on('sync', (state) => {
-          if ( state === 'PREPARED' ) {
-            console.log('synced');
-            resolve();
-          }
-        });
+      this.client.on('sync', (state) => {
+        if ( state === 'PREPARED' ) {
+          console.log('synced');
+          resolve();
+        }
       });
     });
   }

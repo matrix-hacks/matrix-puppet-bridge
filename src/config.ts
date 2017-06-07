@@ -50,6 +50,11 @@ export interface Config {
    */
   servicePrefix: string;
 
+  /**
+   * Optional path to an image to use to set the protocol status room avatar
+   */
+  serviceIconPath?: string;
+
   port: number;
   homeserverDomain: string;
   homeserverUrl: string;
