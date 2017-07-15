@@ -854,7 +854,7 @@ class Base {
         return download.getBufferAndType(avatarUrl).then(({buffer, type})=> {
           let opts = {
             name: path.basename(avatarUrl),
-            type: type.split(';')[0],
+            type,
             rawResponse: false
           };
           return client.uploadContent(buffer, opts);

@@ -36,6 +36,7 @@ const downloadGetBufferAndType = url => {
     } else {
       type = mime.lookup(urlParse(url).pathname);
     }
+    type = type.split(';')[0];
     return { buffer, type };
   });
 };
