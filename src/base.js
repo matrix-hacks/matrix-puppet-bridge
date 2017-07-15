@@ -641,7 +641,7 @@ class Base {
             info("we can't know if this message is from matrix or not, so just ignore it");
             return;
           }
-          else if (this.isTaggedMatrixMessage(text)) {
+          else if (this.isTaggedMatrixMessage(text) || isFilenameTagged(path)) {
             info('it is from matrix, so just ignore it.');
             return;
           } else {
