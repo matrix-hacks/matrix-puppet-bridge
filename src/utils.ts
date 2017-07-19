@@ -6,7 +6,7 @@ import * as needle from 'needle';
 import * as tmp from 'tmp';
 import { parse as urlParse} from 'url';
 
-const entities = new Entities();
+export const entities = new Entities();
 
 const downloadGetStream = (url, data?) => needle.get(url, data);
 
@@ -37,6 +37,7 @@ const downloadGetBufferAndType = (url, data?) => {
     } else {
       type = mime.lookup(urlParse(url).pathname);
     }
+    type = type.split(';')[0];
     return { buffer, type };
   });
 };
