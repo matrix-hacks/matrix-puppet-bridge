@@ -12,9 +12,9 @@ export interface StatusMessageOptions {
 
 // This is the public interface of the base class; it's
 // written here in a concise way so you don't need to look the actual implementation file.
-export interface BaseInterface {
-  joinThirdPartyUsersToStatusRoom(users: Array<ContactListUserData>) : Promise<void>;
-  sendStatusMsg(options: StatusMessageOptions, ...args) : Promise<void>;
-  handleThirdPartyRoomImageMessage(data: ThirdPartyImageMessagePayload) : Promise<void>;
-  handleThirdPartyRoomMessage(data: ThirdPartyMessagePayload) : Promise<void>;
+export abstract class BaseInterface {
+  public abstract joinThirdPartyUsersToStatusRoom(users: Array<ContactListUserData>) : Promise<void>;
+  public abstract sendStatusMsg(options: StatusMessageOptions, ...args) : Promise<void>;
+  public abstract handleThirdPartyRoomImageMessage(data: ThirdPartyImageMessagePayload) : Promise<void>;
+  public abstract handleThirdPartyRoomMessage(data: ThirdPartyMessagePayload) : Promise<void>;
 }

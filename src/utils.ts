@@ -1,27 +1,27 @@
-const Promise = require('bluebird');
-const concatStream = require('concat-stream');
-const needle = require('needle');
-const mime = require('mime-types');
-const urlParse = require('url').parse;
-const fs = require('fs');
-const tmp = require('tmp');
+import * as fs from 'async-file';
+import * as concatStream from 'concat-stream';
+import { AllHtmlEntities as Entities } from 'html-entities';
+import * as mime from 'mime';
+import * as needle from 'needle';
+import * as tmp from 'tmp';
+import { parse as urlParse} from 'url';
 
-import { MatrixClient, UploadResponse } from './matrix-client';
+const entities = new Entities();
 
-const downloadGetStream = url => needle.get(url);
+const downloadGetStream = (url, data?) => needle.get(url, data);
 
-const downloadGetBuffer = url => {
+const downloadGetBuffer = (url, data?) => {
   return new Promise((resolve, reject) => {
-    downloadGetStream(url).pipe(concatStream(resolve)).on('error', reject);
+    downloadGetStream(url, data).pipe(concatStream(resolve)).on('error', reject);
   });
 };
 
-const downloadGetBufferAndHeaders = url => {
+const downloadGetBufferAndHeaders = (url, data?) => {
   return new Promise((resolve, reject) => {
     let headers = {
       'content-type': 'application/octet-stream'
     };
-    let stream = downloadGetStream(url);
+    let stream = downloadGetStream(url, data);
     stream.on('header', (_s, _h) => headers = _h);
     stream.pipe(concatStream((buffer)=>{
       resolve({ buffer, headers });
@@ -29,8 +29,8 @@ const downloadGetBufferAndHeaders = url => {
   });
 };
 
-const downloadGetBufferAndType = url => {
-  return downloadGetBufferAndHeaders(url).then(({buffer, headers})=>{
+const downloadGetBufferAndType = (url, data?) => {
+  return downloadGetBufferAndHeaders(url, data).then(({buffer, headers})=>{
     let type, contentType = headers['content-type'];
     if ( contentType ) {
       type = contentType;
@@ -43,52 +43,23 @@ const downloadGetBufferAndType = url => {
 
 const FILENAME_TAG = '_mx_'; // goes right before file extension
 const FILENAME_TAG_PATTERN = /^.+_mx_\..+$/; // check if tag is right before file extension
+export const isFilenameTagged = (filepath) => !!filepath.match(FILENAME_TAG_PATTERN);
 
 export interface DownloadGetTempfileOptions {
   tagFilename: string;
 }
 
-const downloadGetTempfile = (url, opts:DownloadGetTempfileOptions) => {
+function downloadGetTempfile(url, opts:DownloadGetTempfileOptions) {
   let tag = opts.tagFilename ? FILENAME_TAG : '';
   return downloadGetBufferAndType(url).then(({ buffer, type}) => {
     const ext = mime.extension(type);
     const tmpfile = tmp.fileSync({ postfix: tag+'.'+ext });
-    fs.writeFileSync(tmpfile.name, buffer);
-    return { path: tmpfile.name, remove: tmpfile.removeCallback };
+    fs.writeFile(tmpfile.name, buffer).then(() => {
+      return { path: tmpfile.name, remove: tmpfile.removeCallback };
+    });
   });
 };
 
-export const isFilenameTagged = (filepath) => !!filepath.match(FILENAME_TAG_PATTERN);
-
-
-export const autoTagger = (senderId, self) => (text='') => {
-  let out;
-  if (senderId === undefined) {
-    // tag the message to know it was sent by the bridge
-    out = self.tagMatrixMessage(text);
-  } else {
-    out = text;
-  }
-  return out;
-};
-
-export const createUploader = (client : MatrixClient, name: string, type?: string) => {
-  return {
-    upload: (buffer : Buffer, opts={})=>{
-      return client.uploadContent(buffer, {
-        name, type,
-        rawResponse: false,
-        ...opts
-      }).then((res)=>{
-        return {
-          content_uri: res.content_uri || res,
-          size: buffer.length
-        };
-      });
-    }
-  }
-}
-  
 
 export const download = {
   getStream: downloadGetStream,
@@ -99,7 +70,7 @@ export const download = {
 }
 
 const localdiskGetBufferAndType = (localpath: string) : Promise<{buffer: Buffer, type:string}> => {
-  return Promise.promisify(fs.readFile)(localpath).then(buffer=>{
+  return fs.readFile(localpath).then(buffer=>{
     return { buffer, type: mime.lookup(localpath) };
   });
 };
