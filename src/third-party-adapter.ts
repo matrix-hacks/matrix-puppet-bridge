@@ -39,6 +39,7 @@ export interface RoomData {
   name: string;
   topic: string;
   avatarUrl?: string;
+  isDirect?: boolean;
 }
 
 export abstract class ThirdPartyAdapter {
