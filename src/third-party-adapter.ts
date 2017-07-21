@@ -1,6 +1,6 @@
 import { BangCommand } from './bang-command';
 import { Image } from './image';
-import { BaseInterface } from './base-interface'
+import { PuppetBridge } from './puppet-bridge-interface'
 
 export interface ThirdPartyPayload {
   roomId: string;
@@ -45,13 +45,13 @@ export interface RoomData {
 export abstract class ThirdPartyAdapter {
   protected config: any;
   protected matrixPuppet: string;
-  protected base: BaseInterface;
+  protected puppetBridge: PuppetBridge;
   public abstract serviceName: string;
   public serviceIconPath: string = '';
-  constructor(matrixPuppet: string, config: any, base: BaseInterface) {
+  constructor(matrixPuppet: string, config: any, puppetBridge: PuppetBridge) {
     this.config = config;
     this.matrixPuppet = matrixPuppet;
-    this.base = base;
+    this.puppetBridge = puppetBridge;
   }
 
   initClient(): Promise<void> {
