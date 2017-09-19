@@ -47,6 +47,8 @@ export abstract class ThirdPartyAdapter {
   protected matrixPuppet: string;
   protected puppetBridge: PuppetBridge;
   public abstract serviceName: string;
+  public deduplicationTag = '\ufeff';
+  public deduplicationTagPattern = '\\ufeff$';
   public serviceIconPath: string = '';
   constructor(matrixPuppet: string, config: any, puppetBridge: PuppetBridge) {
     this.config = config;
