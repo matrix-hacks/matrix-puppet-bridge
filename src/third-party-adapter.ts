@@ -73,6 +73,13 @@ export abstract class ThirdPartyAdapter {
   abstract sendImageMessage(thirdPartyRoomId: string, Image): Promise<void>;
 
   /**
+   * Optional Implement how to handle an emote message (/me stuff)
+   */
+  sendEmoteMessage(thirdPartyRoomId: string, text: string): Promise<void> {
+    return this.sendMessage(thirdPartyRoomId, '*'+this.matrixPuppet+' '+text);
+  }
+
+  /**
    * Optional Implement how a read receipt is sent over the third party network
    */
   sendReadReceipt(thirdPartyRoomId: string): Promise<void> {
