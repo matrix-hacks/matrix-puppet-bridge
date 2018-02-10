@@ -44,15 +44,13 @@ export interface RoomData {
 
 export abstract class ThirdPartyAdapter {
   protected config: any;
-  protected matrixPuppet: string;
   protected puppetBridge: PuppetBridge;
   public abstract serviceName: string;
   public deduplicationTag = '\ufeff';
   public deduplicationTagPattern = '\\ufeff$';
   public serviceIconPath: string = '';
-  constructor(matrixPuppet: string, config: any, puppetBridge: PuppetBridge) {
+  constructor(config: any, puppetBridge: PuppetBridge) {
     this.config = config;
-    this.matrixPuppet = matrixPuppet;
     this.puppetBridge = puppetBridge;
   }
 
@@ -78,7 +76,7 @@ export abstract class ThirdPartyAdapter {
    * Optional Implement how to handle an emote message (/me stuff)
    */
   sendEmoteMessage(thirdPartyRoomId: string, text: string): Promise<void> {
-    return this.sendMessage(thirdPartyRoomId, '*'+this.matrixPuppet+' '+text);
+    return this.sendMessage(thirdPartyRoomId, '*'+text+'*');
   }
 
   /**
