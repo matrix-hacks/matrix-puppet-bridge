@@ -70,7 +70,9 @@ export abstract class ThirdPartyAdapter {
   /**
    * Implement how an image message is sent over the third party network
    */
-  abstract sendImageMessage(thirdPartyRoomId: string, Image): Promise<void>;
+  sendImageMessage(thirdPartyRoomId: string, Image): Promise<void> {
+    return this.sendMessage(thirdPartyRoomId, '['+Image.text+'] '+Image.url);
+  };
 
   /**
    * Optional Implement how to handle an emote message (/me stuff)
@@ -95,6 +97,10 @@ export abstract class ThirdPartyAdapter {
    * Optional async call to get additional data about the third party user, for when this information does not arrive in the original payload
    */
   getUserData?(thirdPartyUserId: string): Promise<UserData>;
+  
+  getRoomByUser(uid: string): Promise<string> {
+    return Promise.resolve('');
+  }
 
   handleMatrixUserBangCommand?(cmd: BangCommand, data: object): Promise<void>;
 }
