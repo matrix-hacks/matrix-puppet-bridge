@@ -7,7 +7,7 @@ const urlParse = require('url').parse;
 const fs = require('fs');
 const tmp = require('tmp');
 
-const downloadGetStream = url => needle.get(url);
+const downloadGetStream = url => needle.get(url, {follow: 10});
 
 const downloadGetBuffer = url => {
   return new Promise((resolve, reject) => {
