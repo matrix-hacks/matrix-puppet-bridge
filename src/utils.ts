@@ -8,20 +8,20 @@ import { parse as urlParse} from 'url';
 
 export const entities = new Entities();
 
-const downloadGetStream = (url, data?) => needle.get(url, data);
+const downloadGetStream = (url, options?) => needle.get(url, options);
 
-const downloadGetBuffer = (url, data?) => {
+const downloadGetBuffer = (url, options?) => {
   return new Promise((resolve, reject) => {
-    downloadGetStream(url, data).pipe(concatStream(resolve)).on('error', reject);
+    downloadGetStream(url, options).pipe(concatStream(resolve)).on('error', reject);
   });
 };
 
-const downloadGetBufferAndHeaders = (url, data?) => {
+const downloadGetBufferAndHeaders = (url, options?) => {
   return new Promise((resolve, reject) => {
     let headers = {
       'content-type': 'application/octet-stream'
     };
-    let stream = downloadGetStream(url, data);
+    let stream = downloadGetStream(url, options);
     stream.on('header', (_s, _h) => headers = _h);
     stream.pipe(concatStream((buffer)=>{
       resolve({ buffer, headers });
@@ -29,8 +29,8 @@ const downloadGetBufferAndHeaders = (url, data?) => {
   });
 };
 
-const downloadGetBufferAndType = (url, data?) => {
-  return downloadGetBufferAndHeaders(url, data).then(({buffer, headers})=>{
+const downloadGetBufferAndType = (url, options?) => {
+  return downloadGetBufferAndHeaders(url, options).then(({buffer, headers})=>{
     let type, contentType = headers['content-type'];
     if ( contentType ) {
       type = contentType;
