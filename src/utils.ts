@@ -8,7 +8,13 @@ import { parse as urlParse} from 'url';
 
 export const entities = new Entities();
 
-const downloadGetStream = (url, options?) => needle.get(url, options);
+const downloadGetStream = (url, options?) => {
+  let defaultOptions = {
+    'follow': 10,
+  };
+  let mergedOptions = Object.assign(defaultOptions, options);
+  needle.get(url, mergedOptions);
+}
 
 const downloadGetBuffer = (url, options?) => {
   return new Promise((resolve, reject) => {
