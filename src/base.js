@@ -845,7 +845,7 @@ class Base {
     const { info }  = debug(this.setGhostAvatar.name);
     const client = ghostIntent.getClient();
 
-    return client.getProfileInfo(client.credentials.userId, 'avatar_url').then(({avatar_url})=>{
+    return ghostIntent.getProfileInfo(client.credentials.userId, 'avatar_url').then(({avatar_url})=>{
       if (avatar_url) {
         info('refusing to overwrite existing avatar');
         return null;
