@@ -159,6 +159,18 @@ class Base {
   }
 
   /**
+   * Implement how a file message is sent over the third party network
+   *
+   * @param {string} _thirdPartyRoomId
+   * @param {object} _messageData
+   * @param {object} _matrixEvent
+   * @returns {Promise}
+   */
+  sendFileMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent) {
+    return Promise.reject(new Error('please implement sendFileMessageAsPuppetToThirdPartyRoomWithId'));
+  }
+
+  /**
    * Implement how a read receipt is sent over the third party network
    *
    * @param {string} _thirdPartyRoomId
@@ -801,12 +813,22 @@ class Base {
 
         let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
         promise = () => this.sendImageMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
-          url, text: this.tagMatrixMessage(body),
+          url, text: msg,
           mimetype: data.content.info.mimetype,
           width: data.content.info.w,
           height: data.content.info.h,
           size: data.content.info.size,
         }, data);
+      } else if (msgtype === 'm.file') {
+	logger.info("file upload from riot");
+
+	let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
+	promise = () => this.sendFileMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
+	  url, text: msg,
+	  mimetype: data.content.info.mimetype,
+	  size: data.content.info.size,
+	  filename: data.content.filename,
+	}, data);
       } else {
         promise = () => Promise.reject(new Error('dont know how to handle this msgtype', msgtype));
       }
