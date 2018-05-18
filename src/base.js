@@ -516,14 +516,60 @@ class Base {
     const puppetUserId = puppetClient.credentials.userId;
 
     const grantPuppetMaxPowerLevel = (room_id) => {
-      info("ensuring puppet user has full power over this room");
-      return botIntent.setPowerLevel(room_id, puppetUserId, 100).then(()=>{
-        info('granted puppet client admin status on the protocol status room');
-      }).catch((err)=>{
-        warn(err);
-        warn('ignoring failed attempt to give puppet client admin on the status room');
-      }).then(()=> {
-        return room_id;
+      info("ensuring puppet user has full power over this room:", room_id);
+      const pwrLevel = botIntent.opts.backingStore.getPowerLevelContent(room_id);
+
+      let prom;
+      if (pwrLevel)
+      {
+        prom = Promise.resolve(pwrLevel);
+      }
+      else
+      {
+        prom = Promise.resolve()
+        .then(() => {
+          info("attempting to retrieve power levels with puppet user on room_id:", room_id);
+          return puppetClient.getStateEvent(room_id, "m.room.power_levels", "");
+        })
+        .catch(() => {
+          info("ignoring failed attempt at retrieving power levels with puppet user on room_id:", room_id);
+          info("re-attempting to retrieve power levels with bot user on room_id:", room_id);
+          return botIntent.client.getStateEvent(room_id, "m.room.power_levels", "")
+        })
+      }
+
+      return prom.then((pwrEvent) => {
+        botIntent.opts.backingStore.setPowerLevelContent(room_id, pwrEvent);
+
+        if (pwrEvent.users[puppetUserId] == 100)
+        {
+          info("puppet already has full control over room:", room_id);
+          //return room_id;
+          return botIntent.leave(room_id).then(()=> {
+            info('bot left room:', room_id);
+          }).catch((err)=>{
+            warn(err);
+            warn('ignoring failed attempt to have bot leave room:', room_id);
+          }).then(()=>{
+            return room_id;
+          });
+        }
+
+        return botIntent.setPowerLevel(room_id, puppetUserId, 100).then(()=>{
+          info('granted puppet client admin status on the room:', room_id);
+        }).catch((err)=>{
+          warn(err);
+          warn('ignoring failed attempt to give puppet client admin on:', room_id);
+        }).then(()=> {
+          return botIntent.leave(room_id).then(()=> {
+            info('bot left room:', room_id);
+          }).catch((err)=>{
+            warn(err);
+            warn('ignoring failed attempt to have bot leave room:', room_id);
+          }).then(()=>{
+            return room_id;
+          });
+        });
       });
     };
 
