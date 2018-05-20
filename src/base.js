@@ -623,11 +623,13 @@ class Base {
       senderId,
       avatarUrl,
       text,
-      url, path, buffer, // either one is fine
+      url, path, buffer,
       h,
       w,
       mimetype
     } = thirdPartyRoomImageMessageData;
+
+    path = path || url || buffer; // any of these is fine
 
     return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((matrixRoomId) => {
       return this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl).then((client) => {
