@@ -822,15 +822,15 @@ class Base {
           size: data.content.info.size,
         }, data);
       } else if (msgtype === 'm.file') {
-	logger.info("file upload from riot");
+        logger.info("file upload from riot");
 
-	let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
-	promise = () => this.sendFileMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
-	  url, text: msg,
-	  mimetype: data.content.info.mimetype,
-	  size: data.content.info.size,
-	  filename: data.content.filename,
-	}, data);
+        let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
+        promise = () => this.sendFileMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
+          url, text: msg,
+          mimetype: data.content.info.mimetype,
+          size: data.content.info.size,
+          filename: data.content.filename || body || '',
+        }, data);
       } else {
         promise = () => Promise.reject(new Error('dont know how to handle this msgtype', msgtype));
       }
