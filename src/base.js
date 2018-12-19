@@ -635,13 +635,11 @@ class Base {
       senderId,
       avatarUrl,
       text,
-      url, path, buffer,
+      url, path, buffer, // either one is fine
       h,
       w,
       mimetype
     } = thirdPartyRoomImageMessageData;
-
-    path = path || url || buffer; // any of these is fine
 
     return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((matrixRoomId) => {
       return this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl).then((client) => {
@@ -655,7 +653,7 @@ class Base {
             info("we can't know if this message is from matrix or not, so just ignore it");
             return;
           }
-          else if (this.isTaggedMatrixMessage(text) || isFilenameTagged(path)) {
+          else if (this.isTaggedMatrixMessage(text) || isFilenameTagged(path || url || '')) {
             info('it is from matrix, so just ignore it.');
             return;
           } else {
