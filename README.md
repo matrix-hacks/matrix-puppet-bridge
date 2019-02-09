@@ -1,4 +1,4 @@
-# matrix-puppet-bridge
+# matrix-puppet-bridge [![#matrix-puppet-bridge:matrix.org](https://img.shields.io/matrix/matrix-puppet-bridge:matrix.org.svg?label=%23matrix-puppet-bridge%3Amatrix.org&logo=matrix&server_fqdn=matrix.org)](https://matrix.to/#/#matrix-puppet-bridge:matrix.org)
 
 This project provides a base class for a style of Matrix bridge which primarily acts as or "puppets" a specific user (usually yourself) on your homeserver and on a third party service.
 
@@ -127,4 +127,4 @@ For more information, see [this discussion](https://github.com/matrix-hacks/matr
 
 You can use GitHub issues on this or any other puppet-bridge projects.
 
-Alternatively you can join [#matrix-puppet-bridge:matrix.org](https://riot.im/app/#/room/#matrix-puppet-bridge:matrix.org)
+Alternatively you can join the [![Matrix Puppet Bridge](https://user-images.githubusercontent.com/13843293/52007839-4b2f6580-24c7-11e9-9a6c-14d8fc0d0737.png)](https://matrix.to/#/#matrix-puppet-bridge:matrix.org) room
