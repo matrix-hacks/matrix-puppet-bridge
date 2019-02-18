@@ -576,6 +576,21 @@ class Base {
         }
       });
     }).then(matrixRoomId => {
+      info("setting room as invite-only", matrixRoomId);
+      return puppetClient.sendStateEvent(matrixRoomId, "m.room.join_rules", {"join_rule": "invite"}).then(() =>{
+        info("succeeded in setting room as invite-only using puppet client. Room:", matrixRoomId);
+        return matrixRoomId;
+      }, (err) => {
+        info("Since setting join rules with puppet client failed, now trying with bot client");
+        return botIntent.sendStateEvent(matrixRoomId, "m.room.join_rules", "", {"join_rule": "invite"}).then(()=>{
+          info("succeeded in setting room as invite-only using bot client. Room:", matrixRoomId);
+          return matrixRoomId;
+        }, (err) => {
+          warn("Both puppet and bot client invite only settings failed :( Error:", err.message);
+          return matrixRoomId;
+        });
+      });
+    }).then(matrixRoomId => {
       this.puppet.saveThirdPartyRoomId(matrixRoomId, thirdPartyRoomId);
       return matrixRoomId;
     });
