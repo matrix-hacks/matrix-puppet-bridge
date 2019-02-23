@@ -13,7 +13,7 @@ const downloadGetStream = (url, options?) => {
     'follow': 10,
   };
   let mergedOptions = Object.assign(defaultOptions, options);
-  needle.get(url, mergedOptions);
+  return needle.get(url, mergedOptions);
 }
 
 const downloadGetBuffer = (url, options?) => {
