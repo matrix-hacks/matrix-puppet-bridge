@@ -447,6 +447,9 @@ class Base {
     const { info } = debug(this.getThirdPartyRoomIdFromMatrixRoomId.name);
     const patt = new RegExp(`^#${this.getServicePrefix()}_(.+)$`);
     const room = this.puppet.getClient().getRoom(matrixRoomId);
+    if (!room) {
+      return null;
+    }
     info('reducing array of alases to a 3prid');
     return room.getAliases().reduce((result, alias) => {
       const localpart = alias.replace(':'+this.domain, '');
