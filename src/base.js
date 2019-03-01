@@ -309,7 +309,7 @@ class Base {
    * @params {_roomAliasLocalPart} Optional, the room alias local part
    * @returns {Promise} Promise resolving the Matrix room ID of the status room
    */
-  getStatusRoomId(_roomAliasLocalPart) {
+  async getStatusRoomId(_roomAliasLocalPart) {
     const { info, warn } = debug(this.getStatusRoomId.name);
     const roomAliasLocalPart = _roomAliasLocalPart || this.getServicePrefix()+"_"+this.getStatusRoomPostfix();
     const roomAlias = "#"+roomAliasLocalPart+":"+this.domain;
@@ -319,40 +319,41 @@ class Base {
     const botClient = botIntent.getClient();
 
     info('looking up', roomAlias);
-    return puppetClient.getRoomIdForAlias(roomAlias).then(({room_id}) => {
+    let matrixRoomId;
+    try {
+      const { room_id } = await puppetClient.getRoomIdForAlias(roomAlias);
       info("found matrix room via alias. room_id:", room_id);
-      return this._grantPuppetMaxPowerLevel(room_id);
-    }, (_err) => {
+      await this._grantPuppetMaxPowerLevel(room_id);
+      matrixRoomId = room_id;
+    } catch(_err) {
       const name = this.getServiceName() + " Protocol";
       const topic = this.getServiceName() + " Protocol Status Messages";
       info("creating status room !!!!", ">>>>"+roomAliasLocalPart+"<<<<", name, topic);
-      return botIntent.createRoom({
+      const { room_id } = await botIntent.createRoom({
         createAsClient: false,
         options: {
           name, topic, room_alias_name: roomAliasLocalPart
         }
-      }).then(({room_id}) => {
-        info("status room created", room_id, roomAliasLocalPart);
-        return room_id;
       });
-    }).then(matrixRoomId => {
-      info("making puppet join protocol status room", matrixRoomId);
-      return puppetClient.joinRoom(matrixRoomId).then(() => {
-        info("puppet joined the protocol status room");
-        return this._grantPuppetMaxPowerLevel(matrixRoomId);
-      }, (err) => {
-        if (err.message === 'No known servers') {
-          warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
-          return botClient.deleteAlias(roomAlias).then(()=>{
-            warn('deleted alias... trying again to get or create room.');
-            return this.getStatusRoomId(_roomAliasLocalPart);
-          });
-        } else {
-          warn("ignoring error from puppet join room: ", err.message);
-          return matrixRoomId;
-        }
-      });
-    });
+      info("status room created", room_id, roomAliasLocalPart);
+      matrixRoomId = room_id;
+    }
+
+    info("making puppet join protocol status room", matrixRoomId);
+    try {
+      await puppetClient.joinRoom(matrixRoomId);
+      info("puppet joined the protocol status room");
+      await this._grantPuppetMaxPowerLevel(matrixRoomId);
+    } catch(err) {
+      if (err.message === 'No known servers') {
+        warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
+        await botClient.deleteAlias(roomAlias);
+        warn('deleted alias... trying again to get or create room.');
+        return await this.getStatusRoomId(_roomAliasLocalPart);
+      }
+      warn("ignoring error from puppet join room: ", err.message);
+    }
+    return matrixRoomId;
   }
 
   /**
