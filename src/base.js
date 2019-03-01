@@ -796,11 +796,18 @@ class Base {
       return warn('ignored a matrix event', data.type);
     }
   }
-  handleMatrixMessageEvent(data) {
+
+  async handleMatrixMessageEvent(data) {
+    try {
+      return await this._handleMatrixMessageEvent(data);
+    } catch (err) {
+      return await this.sendStatusMsg({}, 'Error in '+this.handleMatrixEvent.name, err, data);
+    }
+  }
+
+  async _handleMatrixMessageEvent(data) {
     const logger = debug(this.handleMatrixMessageEvent.name);
     const { room_id, content: { body, msgtype } } = data;
-
-    let promise, msg;
 
     if (this.isTaggedMatrixMessage(body)) {
       logger.info("ignoring tagged message, it was sent by the bridge");
@@ -811,55 +818,53 @@ class Base {
     const isStatusRoom = thirdPartyRoomId === this.getStatusRoomPostfix();
 
     if (!thirdPartyRoomId) {
-      promise = () => Promise.reject(new Error('could not determine third party room id!'));
-    } else if (isStatusRoom) {
+      throw new Error('could not determine third party room id!');
+    }
+    if (isStatusRoom) {
       logger.info("ignoring incoming message to status room");
 
-      msg = this.tagMatrixMessage("Commands are currently ignored here");
+      const msg = this.tagMatrixMessage("Commands are currently ignored here");
 
       // We may wish to process bang commands here at some point,
       // but for now let's just send a message back
-      promise = () => this.sendStatusMsg({ fixedWidthOutput: false }, msg);
+      return await this.sendStatusMsg({ fixedWidthOutput: false }, msg);
+    }
+    const msg = this.tagMatrixMessage(body);
 
-    } else {
-      msg = this.tagMatrixMessage(body);
-
-      if (msgtype === 'm.text' || msgtype === 'm.notice') {
-        if (this.handleMatrixUserBangCommand) {
-          const bc = bangCommand(body);
-          if (bc) return this.handleMatrixUserBangCommand(bc, data);
-        }
-        promise = () => this.sendMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, data);
-      } else if (msgtype === 'm.image') {
-        logger.info("picture message from riot");
-
-        let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
-        promise = () => this.sendImageMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
-          url, text: msg,
-          mimetype: data.content.info.mimetype,
-          width: data.content.info.w,
-          height: data.content.info.h,
-          size: data.content.info.size,
-        }, data);
-      } else if (msgtype === 'm.file') {
-        logger.info("file upload from riot");
-
-        let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
-        promise = () => this.sendFileMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
-          url, text: msg,
-          mimetype: data.content.info.mimetype,
-          size: data.content.info.size,
-          filename: data.content.filename || body || '',
-        }, data);
-      } else {
-        promise = () => Promise.reject(new Error('dont know how to handle this msgtype', msgtype));
+    if (msgtype === 'm.text' || msgtype === 'm.notice') {
+      if (this.handleMatrixUserBangCommand) {
+        const bc = bangCommand(body);
+        if (bc) return this.handleMatrixUserBangCommand(bc, data);
       }
+      return await this.sendMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, data);
+    }
+    if (msgtype === 'm.image') {
+      logger.info("picture message from riot");
+
+      let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
+      return await this.sendImageMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
+        url, text: msg,
+        mimetype: data.content.info.mimetype,
+        width: data.content.info.w,
+        height: data.content.info.h,
+        size: data.content.info.size,
+      }, data);
+    }
+    if (msgtype === 'm.file') {
+      logger.info("file upload from riot");
+
+      let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
+      return await this.sendFileMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
+        url, text: msg,
+        mimetype: data.content.info.mimetype,
+        size: data.content.info.size,
+        filename: data.content.filename || body || '',
+      }, data);
     }
 
-    return promise().catch(err=>{
-      this.sendStatusMsg({}, 'Error in '+this.handleMatrixEvent.name, err, data);
-    });
+    throw new Error('dont know how to handle this msgtype', msgtype);
   }
+
   defaultDeduplicationTag() {
     return " \ufeff";
   }
