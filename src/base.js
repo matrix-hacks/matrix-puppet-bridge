@@ -142,8 +142,8 @@ class Base {
    * @param {object} _matrixEvent
    * @returns {Promise}
    */
-  sendMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _messageText, _matrixEvent) {
-    return Promise.reject(new Error('please implement sendMessageAsPuppetToThirdPartyRoomWithId'));
+  async sendMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _messageText, _matrixEvent) {
+    throw new Error('please implement sendMessageAsPuppetToThirdPartyRoomWithId');
   }
 
   /**
@@ -154,8 +154,8 @@ class Base {
    * @param {object} _matrixEvent
    * @returns {Promise}
    */
-  sendImageMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent) {
-    return Promise.reject(new Error('please implement sendImageMessageAsPuppetToThirdPartyRoomWithId'));
+  async sendImageMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent) {
+    throw new Error('please implement sendImageMessageAsPuppetToThirdPartyRoomWithId');
   }
 
   /**
@@ -166,8 +166,8 @@ class Base {
    * @param {object} _matrixEvent
    * @returns {Promise}
    */
-  sendFileMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent) {
-    return Promise.reject(new Error('please implement sendFileMessageAsPuppetToThirdPartyRoomWithId'));
+  async sendFileMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent) {
+    throw new Error('please implement sendFileMessageAsPuppetToThirdPartyRoomWithId');
   }
 
   /**
@@ -176,8 +176,8 @@ class Base {
    * @param {string} _thirdPartyRoomId
    * @returns {Promise}
    */
-  sendReadReceiptAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId) {
-    return Promise.reject(new Error('please implement sendReadReceiptAsPuppetToThirdPartyRoomWithId'));
+  async sendReadReceiptAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId) {
+    throw new Error('please implement sendReadReceiptAsPuppetToThirdPartyRoomWithId');
   }
 
   /**
@@ -225,7 +225,7 @@ class Base {
    * @param {string} thirdPartyRoomId The unique identifier on the third party's side
    * @returns {Promise} Resolve with an object like {senderName: 'some name'}
    */
-  getThirdPartyUserDataById(_thirdPartyUserId) {
+  async getThirdPartyUserDataById(_thirdPartyUserId) {
     throw new Error("override me and return or resolve a promise with at least {senderName: 'some name'}, otherwise provide it in the original payload and i will never be invoked");
   }
   /**
@@ -234,7 +234,7 @@ class Base {
    * @param {string} thirdPartyRoomId The unique identifier on the third party's side
    * @returns {Promise} Resolve with an object like { name:string, topic:string }
    */
-  getThirdPartyRoomDataById(_thirdPartyRoomId) {
+  async getThirdPartyRoomDataById(_thirdPartyRoomId) {
     throw new Error("override me");
   }
 
