@@ -513,29 +513,24 @@ class Base {
    * @param {string} thirdPartyUserId
    * @returns {Promise} A promise resolving to a {RemoteUser}
    */
-  getOrInitRemoteUserStoreDataFromThirdPartyUserId(thirdPartyUserId) {
+  async getOrInitRemoteUserStoreDataFromThirdPartyUserId(thirdPartyUserId) {
     const { info } = debug(this.getOrInitRemoteUserStoreDataFromThirdPartyUserId.name);
     const userStore = this.bridge.getUserStore();
-    return userStore.getRemoteUser(thirdPartyUserId).then(rUser=>{
-      if ( rUser ) {
-        info("found existing remote user in store", rUser);
-        return rUser;
-      } else {
-        info("did not find existing remote user in store, we must create it now");
-        return this.getThirdPartyUserDataById(thirdPartyUserId).then(thirdPartyUserData => {
-          info("got 3p user data:", thirdPartyUserData);
-          return new RemoteUser(thirdPartyUserId, {
-            senderName: thirdPartyUserData.senderName
-          });
-        }).then(rUser => {
-          return userStore.setRemoteUser(rUser);
-        }).then(()=>{
-          return userStore.getRemoteUser(thirdPartyUserId);
-        }).then(rUser => {
-          return rUser;
-        });
-      }
+    let rUser = await userStore.getRemoteUser(thirdPartyUserId);
+    if ( rUser ) {
+      info("found existing remote user in store", rUser);
+      return rUser;
+    }
+
+    info("did not find existing remote user in store, we must create it now");
+    const thirdPartyUserData = await this.getThirdPartyUserDataById(thirdPartyUserId);
+    info("got 3p user data:", thirdPartyUserData);
+
+    rUser = new RemoteUser(thirdPartyUserId, {
+      senderName: thirdPartyUserData.senderName
     });
+    await userStore.setRemoteUser(rUser);
+    return await userStore.getRemoteUser(thirdPartyUserId);
   }
 
   async getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId) {
