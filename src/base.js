@@ -12,7 +12,7 @@ const fs = require('fs');
  * Extend your app from this class to get started.
  *
  *
- * @example 
+ * @example
  * // The following example is from {@link https://github.com/matrix-hacks/matrix-puppet-facebook|the facebook bridge}
 const {
   MatrixAppServiceBridge: {
@@ -648,7 +648,7 @@ class Base {
   /**
    * Returns a promise
    */
-  handleThirdPartyRoomImageMessage(thirdPartyRoomImageMessageData) {
+  async handleThirdPartyRoomImageMessage(thirdPartyRoomImageMessageData) {
     const { info, warn } = debug(this.handleThirdPartyRoomImageMessage.name);
     info('handling third party room image message', thirdPartyRoomImageMessageData);
     let {
@@ -663,77 +663,69 @@ class Base {
       mimetype
     } = thirdPartyRoomImageMessageData;
 
-    return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((matrixRoomId) => {
-      return this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl).then((client) => {
-        if (senderId === undefined) {
-          info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
-          info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
-          info("if it came from a matrix client, then it's already in the client, sending again would dupe");
-          info("we use a tag on the end of messages to determine if it came from matrix");
+    const matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId);
+    const client = await this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl);
+    if (senderId === undefined) {
+      info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
+      info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
+      info("if it came from a matrix client, then it's already in the client, sending again would dupe");
+      info("we use a tag on the end of messages to determine if it came from matrix");
 
-          if (typeof text === 'undefined') {
-            info("we can't know if this message is from matrix or not, so just ignore it");
-            return;
-          }
-          else if (this.isTaggedMatrixMessage(text) || isFilenameTagged(path || url || '')) {
-            info('it is from matrix, so just ignore it.');
-            return;
-          } else {
-            info('it is from 3rd party client');
-          }
-        }
+      if (typeof text === 'undefined') {
+        info("we can't know if this message is from matrix or not, so just ignore it");
+        return;
+      }
+      if (this.isTaggedMatrixMessage(text) || isFilenameTagged(path || url || '')) {
+        info('it is from matrix, so just ignore it.');
+        return;
+      }
+      info('it is from 3rd party client');
+    }
 
-        let upload = (buffer, opts)=>{
-          return client.uploadContent(buffer, Object.assign({
-            name: text,
-            type: mimetype,
-            rawResponse: false
-          }, opts || {})).then((res)=>{
-            return {
-              content_uri: res.content_uri || res,
-              size: buffer.length
-            };
-          });
-        };
+    let upload = async(buffer, opts) => {
+      const res = await client.uploadContent(buffer, Object.assign({
+        name: text,
+        type: mimetype,
+        rawResponse: false
+      }, opts || {}));
+      return {
+        content_uri: res.content_uri || res,
+        size: buffer.length
+      };
+    };
 
-        let promise;
-        if ( url ) {
-          promise = ()=> {
-            return download.getBufferAndType(url).then(({buffer,type}) => {
-              return upload(buffer, { type: mimetype || type });
-            });
-          };
-        } else if ( path ) {
-          promise = () => {
-            return Promise.promisify(fs.readFile)(path).then(buffer => {
-              return upload(buffer);
-            });
-          };
-        } else if ( buffer ) {
-          promise = () => upload(buffer);
-        } else {
-          promise = Promise.reject(new Error('missing url or path'));
-        }
+    const tag = autoTagger(senderId, this);
 
-        const tag = autoTagger(senderId, this);
+    let res;
+    try {
+      if ( url ) {
+        const {buffer, type} = await download.getBufferAndType(url);
+        res = await upload(buffer, { type: mimetype || type });
+      } else if ( path ) {
+        const buffer = await (Promise.promisify(fs.readFile)(path));
+        res = await upload(buffer);
+      } else if ( buffer ) {
+        res = await upload(buffer);
+      } else {
+        throw new Error('missing url or path');
+      }
+    } catch(err) {
+      warn('upload error', err);
 
-        promise().then(({ content_uri, size }) => {
-          info('uploaded to', content_uri);
-          let msg = tag(text);
-          let opts = { mimetype, h, w, size };
-          return client.sendImageMessage(matrixRoomId, content_uri, opts, msg);
-        }, (err) =>{
-          warn('upload error', err);
+      let opts = {
+        body: tag(url || path || text),
+        msgtype: "m.text"
+      };
+      return await client.sendMessage(matrixRoomId, opts);
+    }
 
-          let opts = {
-            body: tag(url || path || text),
-            msgtype: "m.text"
-          };
-          return client.sendMessage(matrixRoomId, opts);
-        });
-      });
-    });
+    const { content_uri, size } = res;
+    info('uploaded to', content_uri);
+    let msg = tag(text);
+    let opts = { mimetype, h, w, size };
+    return await client.sendImageMessage(matrixRoomId, content_uri, opts, msg);
   }
+
   /**
    * Returns a promise
    */
