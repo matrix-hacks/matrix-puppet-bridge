@@ -487,7 +487,7 @@ class Base {
    *
    * @returns {Promise} A promise resolving to an Intent
    */
-  getIntentFromThirdPartySenderId(userId, name, avatarUrl) {
+  async getIntentFromThirdPartySenderId(userId, name, avatarUrl) {
     const ghostIntent = this.bridge.getIntent(this.getGhostUserFromThirdPartySenderId(userId));
 
     let promiseList = [];
@@ -497,7 +497,8 @@ class Base {
     if (avatarUrl)
       promiseList.push(this.setGhostAvatar(ghostIntent, avatarUrl));
 
-    return Promise.all(promiseList).then(() => ghostIntent);
+    await Promise.all(promiseList);
+    return ghostIntent;
   }
 
   getIntentFromApplicationServerBot() {
