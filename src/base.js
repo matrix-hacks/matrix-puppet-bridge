@@ -48,25 +48,23 @@ class App extends MatrixPuppetBridgeBase {
     });
     return this.thirdPartyClient.login();
   }
-  getThirdPartyUserDataById(id) {
-    return this.thirdPartyClient.getUserInfoById(id).then(userInfo=>{
-      debug('got user data', userInfo);
-      return { senderName: userInfo.name };
-    });
+  async getThirdPartyUserDataById(id) {
+    const userInfo = await this.thirdPartyClient.getUserInfoById(id);
+    debug('got user data', userInfo);
+    return { senderName: userInfo.name };
   }
-  getThirdPartyRoomDataById(threadId) {
+  async getThirdPartyRoomDataById(threadId) {
     debug('getting third party room data by thread id', threadId);
     let label = this.threadInfo[threadId].isGroup ? "Group" : "Friend";
-    return this.thirdPartyClient.getThreadInfo(threadId).then(data=>{
-      let roomData = {
-        name: data.name,
-        topic: `Facebook ${label}`
-      };
-      debug('room data', roomData);
-      return roomData;
-    });
+    const data = await this.thirdPartyClient.getThreadInfo(threadId);
+    let roomData = {
+      name: data.name,
+      topic: `Facebook ${label}`
+    };
+    debug('room data', roomData);
+    return roomData;
   }
-  sendMessageAsPuppetToThirdPartyRoomWithId(id, text) {
+  async sendMessageAsPuppetToThirdPartyRoomWithId(id, text) {
     return this.thirdPartyClient.sendMessage(id, text);
   }
 }
@@ -74,31 +72,31 @@ class App extends MatrixPuppetBridgeBase {
 new Cli({
   port: config.port,
   registrationPath: config.registrationPath,
-  generateRegistration: function(reg, callback) {
-    puppet.associate().then(()=>{
+  generateRegistration: async(reg, callback) => {
+    try {
+      await puppet.associate();
       reg.setId(AppServiceRegistration.generateToken());
       reg.setHomeserverToken(AppServiceRegistration.generateToken());
       reg.setAppServiceToken(AppServiceRegistration.generateToken());
       reg.setSenderLocalpart("facebookbot");
       reg.addRegexPattern("users", "@facebook_.*", true);
       callback(reg);
-    }).catch(err=>{
+    } catch(err) {
       console.error(err.message);
       process.exit(-1);
-    });
+    }
   },
-  run: function(port) {
+  run: async(port) => {
     const app = new App(config, puppet);
-    return puppet.startClient().then(()=>{
-      return app.initThirdPartyClient();
-    }).then(() => {
-      return app.bridge.run(port, config);
-    }).then(()=>{
+    try {
+      await puppet.startClient();
+      await app.initThirdPartyClient();
+      await app.bridge.run(port, config);
       console.log('Matrix-side listening on port %s', port);
-    }).catch(err=>{
+    } catch(err) {
       console.error(err.message);
       process.exit(-1);
-    });
+    }
   }
 }).run();
  */
