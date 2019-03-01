@@ -286,6 +286,23 @@ class Base {
     await puppetClient.joinRoom(matrixRoomId);
   }
 
+  async _grantPuppetMaxPowerLevel(room_id) {
+    const { info, warn } = debug(this._grantPuppetMaxPowerLevel.name);
+    const puppetClient = this.puppet.getClient();
+    const puppetUserId = puppetClient.credentials.userId;
+
+    const botIntent = this.getIntentFromApplicationServerBot();
+    info("ensuring puppet user has full power over this room");
+    try {
+      await botIntent.setPowerLevel(room_id, puppetUserId, 100);
+      info('granted puppet client admin status on the protocol status room');
+    } catch(err) {
+      warn(err);
+      warn('ignoring failed attempt to give puppet client admin on the status room');
+    }
+    return room_id;
+  }
+
   /**
    * Async call to get the status room ID
    *
@@ -301,24 +318,10 @@ class Base {
     const botIntent = this.getIntentFromApplicationServerBot();
     const botClient = botIntent.getClient();
 
-    const puppetUserId = puppetClient.credentials.userId;
-
-    const grantPuppetMaxPowerLevel = (room_id) => {
-      info("ensuring puppet user has full power over this room");
-      return botIntent.setPowerLevel(room_id, puppetUserId, 100).then(()=>{
-        info('granted puppet client admin status on the protocol status room');
-      }).catch((err)=>{
-        warn(err);
-        warn('ignoring failed attempt to give puppet client admin on the status room');
-      }).then(()=> {
-        return room_id;
-      });
-    };
-
     info('looking up', roomAlias);
     return puppetClient.getRoomIdForAlias(roomAlias).then(({room_id}) => {
       info("found matrix room via alias. room_id:", room_id);
-      return grantPuppetMaxPowerLevel(room_id);
+      return this._grantPuppetMaxPowerLevel(room_id);
     }, (_err) => {
       const name = this.getServiceName() + " Protocol";
       const topic = this.getServiceName() + " Protocol Status Messages";
@@ -336,7 +339,7 @@ class Base {
       info("making puppet join protocol status room", matrixRoomId);
       return puppetClient.joinRoom(matrixRoomId).then(() => {
         info("puppet joined the protocol status room");
-        return grantPuppetMaxPowerLevel(matrixRoomId);
+        return this._grantPuppetMaxPowerLevel(matrixRoomId);
       }, (err) => {
         if (err.message === 'No known servers') {
           warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
@@ -542,19 +545,6 @@ class Base {
     const puppetClient = this.puppet.getClient();
     const botIntent = this.getIntentFromApplicationServerBot();
     const botClient = botIntent.getClient();
-    const puppetUserId = puppetClient.credentials.userId;
-
-    const grantPuppetMaxPowerLevel = (room_id) => {
-      info("ensuring puppet user has full power over this room");
-      return botIntent.setPowerLevel(room_id, puppetUserId, 100).then(()=>{
-        info('granted puppet client admin status on the protocol status room');
-      }).catch((err)=>{
-        warn(err);
-        warn('ignoring failed attempt to give puppet client admin on the status room');
-      }).then(()=> {
-        return room_id;
-      });
-    };
 
     return puppetClient.getRoomIdForAlias(roomAlias).then(({room_id}) => {
       info("found matrix room via alias. room_id:", room_id);
@@ -579,7 +569,7 @@ class Base {
       info("making puppet join room", matrixRoomId);
       return this._joinPuppetClientToRoom(matrixRoomId).then(()=>{
         info("returning room id after join room attempt", matrixRoomId);
-        return grantPuppetMaxPowerLevel(matrixRoomId);
+        return this._grantPuppetMaxPowerLevel(matrixRoomId);
       }, (err) => {
         if ( err.message === 'No known servers' ) {
           warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
