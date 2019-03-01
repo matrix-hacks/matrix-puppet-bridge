@@ -537,7 +537,8 @@ class Base {
       }
     });
   }
-  getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId) {
+
+  async getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId) {
     const { warn, info } = debug(this.getOrCreateMatrixRoomFromThirdPartyRoomId.name);
     const roomAlias = this.getRoomAliasFromThirdPartyRoomId(thirdPartyRoomId);
     const roomAliasName = this.getRoomAliasLocalPartFromThirdPartyRoomId(thirdPartyRoomId);
@@ -546,61 +547,58 @@ class Base {
     const botIntent = this.getIntentFromApplicationServerBot();
     const botClient = botIntent.getClient();
 
-    return puppetClient.getRoomIdForAlias(roomAlias).then(({room_id}) => {
+    let matrixRoomId;
+    try {
+      const { room_id } = puppetClient.getRoomIdForAlias(roomAlias);
       info("found matrix room via alias. room_id:", room_id);
-      return room_id;
-    }, (_err) => {
+      matrixRoomId = room_id;
+    } catch(_err) {
       info("the room doesn't exist. we need to create it for the first time");
-      return Promise.resolve(this.getThirdPartyRoomDataById(thirdPartyRoomId)).then(thirdPartyRoomData => {
-        info("got 3p room data", thirdPartyRoomData);
-        const { name, topic } = thirdPartyRoomData;
-        info("creating room !!!!", ">>>>"+roomAliasName+"<<<<", name, topic);
-        return botIntent.createRoom({
-          createAsClient: true, // bot won't auto-join the room in this case
-          options: {
-            name, topic, room_alias_name: roomAliasName
-          }
-        }).then(({room_id}) => {
-          info("room created", room_id, roomAliasName);
-          return room_id;
-        });
-      });
-    }).then(matrixRoomId => {
-      info("making puppet join room", matrixRoomId);
-      return this._joinPuppetClientToRoom(matrixRoomId).then(()=>{
-        info("returning room id after join room attempt", matrixRoomId);
-        return this._grantPuppetMaxPowerLevel(matrixRoomId);
-      }, (err) => {
-        if ( err.message === 'No known servers' ) {
-          warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
-          return botClient.deleteAlias(roomAlias).then(()=>{
-            warn('deleted alias... trying again to get or create room.');
-            return this.getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId);
-          });
-        } else {
-          warn("ignoring error from puppet join room: ", err.message);
-          return matrixRoomId;
+      const thirdPartyRoomData = await this.getThirdPartyRoomDataById(thirdPartyRoomId);
+      info("got 3p room data", thirdPartyRoomData);
+      const { name, topic } = thirdPartyRoomData;
+      info("creating room !!!!", ">>>>"+roomAliasName+"<<<<", name, topic);
+      const { room_id } = await botIntent.createRoom({
+        createAsClient: true, // bot won't auto-join the room in this case
+        options: {
+          name, topic, room_alias_name: roomAliasName
         }
-      });
-    }).then(matrixRoomId => {
-      info("setting room as invite-only", matrixRoomId);
-      return puppetClient.sendStateEvent(matrixRoomId, "m.room.join_rules", {"join_rule": "invite"}).then(() =>{
-        info("succeeded in setting room as invite-only using puppet client. Room:", matrixRoomId);
-        return matrixRoomId;
-      }, (err) => {
-        info("Since setting join rules with puppet client failed, now trying with bot client");
-        return botIntent.sendStateEvent(matrixRoomId, "m.room.join_rules", "", {"join_rule": "invite"}).then(()=>{
-          info("succeeded in setting room as invite-only using bot client. Room:", matrixRoomId);
-          return matrixRoomId;
-        }, (err) => {
-          warn("Both puppet and bot client invite only settings failed :( Error:", err.message);
-          return matrixRoomId;
-        });
-      });
-    }).then(matrixRoomId => {
-      this.puppet.saveThirdPartyRoomId(matrixRoomId, thirdPartyRoomId);
-      return matrixRoomId;
-    });
+      })
+      info("room created", room_id, roomAliasName);
+      matrixRoomId = room_id;
+    }
+
+    info("making puppet join room", matrixRoomId);
+    try {
+      await this._joinPuppetClientToRoom(matrixRoomId);
+      info("returning room id after join room attempt", matrixRoomId);
+      await this._grantPuppetMaxPowerLevel(matrixRoomId);
+    } catch(err) {
+      if ( err.message === 'No known servers' ) {
+        warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
+        await botClient.deleteAlias(roomAlias);
+        warn('deleted alias... trying again to get or create room.');
+        matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId);
+      } else {
+        warn("ignoring error from puppet join room: ", err.message);
+      }
+    }
+
+    info("setting room as invite-only", matrixRoomId);
+    try {
+      await puppetClient.sendStateEvent(matrixRoomId, "m.room.join_rules", {"join_rule": "invite"});
+      info("succeeded in setting room as invite-only using puppet client. Room:", matrixRoomId);
+    } catch(err) {
+      info("Since setting join rules with puppet client failed, now trying with bot client");
+      try {
+        await botIntent.sendStateEvent(matrixRoomId, "m.room.join_rules", "", {"join_rule": "invite"});
+        info("succeeded in setting room as invite-only using bot client. Room:", matrixRoomId);
+      } catch(err) {
+        warn("Both puppet and bot client invite only settings failed :( Error:", err.message);
+      }
+    }
+    this.puppet.saveThirdPartyRoomId(matrixRoomId, thirdPartyRoomId);
+    return matrixRoomId;
   }
 
   /**
