@@ -614,35 +614,32 @@ class Base {
    *
    * @returns {Promise} A Promise resolving to the user's client object
    */
-  getUserClient(roomId, senderId, senderName, avatarUrl, doNotTryToGetRemoteUserStoreData) {
+  async getUserClient(roomId, senderId, senderName, avatarUrl, doNotTryToGetRemoteUserStoreData) {
     const { info } = debug(this.getUserClient.name);
     info("get user client for third party user %s (%s)", senderId, senderName);
 
     if (senderId === undefined) {
-      return Promise.resolve(this.puppet.getClient());
-    } else {
-      if (!senderName && !this.allowNullSenderName) {
-        if (doNotTryToGetRemoteUserStoreData)
-          throw new Error('preventing an endless loop');
-
-        info("no senderName provided with payload, will check store");
-        return this.getOrInitRemoteUserStoreDataFromThirdPartyUserId(senderId).then((remoteUser)=>{
-          info("got remote user from store, with a possible client API call in there somewhere", remoteUser);
-          info("will retry now");
-          const senderName = remoteUser.get('senderName');
-          return this.getUserClient(roomId, senderId, senderName, avatarUrl, true);
-        });
-      }
-
-      info("this message was not sent by me");
-      return this.getIntentFromThirdPartySenderId(senderId, senderName, avatarUrl)
-        .then((ghostIntent) => {
-          return this.getStatusRoomId()
-            .then(statusRoomId => ghostIntent.join(statusRoomId))
-            .then(() => ghostIntent.join(roomId))
-            .then(() => ghostIntent.getClient());
-        });
+      return this.puppet.getClient();
     }
+
+    if (!senderName && !this.allowNullSenderName) {
+      if (doNotTryToGetRemoteUserStoreData)
+        throw new Error('preventing an endless loop');
+
+      info("no senderName provided with payload, will check store");
+      const remoteUser = await this.getOrInitRemoteUserStoreDataFromThirdPartyUserId(senderId);
+      info("got remote user from store, with a possible client API call in there somewhere", remoteUser);
+      info("will retry now");
+      const senderName = remoteUser.get('senderName');
+      return await this.getUserClient(roomId, senderId, senderName, avatarUrl, true);
+    }
+
+    info("this message was not sent by me");
+    const ghostIntent = await this.getIntentFromThirdPartySenderId(senderId, senderName, avatarUrl);
+    const statusRoomId = await this.getStatusRoomId();
+    await ghostIntent.join(statusRoomId);
+    await ghostIntent.join(roomId);
+    return await ghostIntent.getClient();
   }
 
   /**
