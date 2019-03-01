@@ -737,7 +737,14 @@ class Base {
   /**
    * Returns a promise
    */
-  handleThirdPartyRoomMessage(thirdPartyRoomMessageData) {
+  async handleThirdPartyRoomMessage(thirdPartyRoomMessageData) {
+    try {
+      return await this._handleThirdPartyRoomMessage(thirdPartyRoomMessageData);
+    } catch(err) {
+      return await this.sendStatusMsg({}, 'Error in '+this.handleThirdPartyRoomMessage.name, err, thirdPartyRoomMessageData);
+    }
+  }
+  async _handleThirdPartyRoomMessage(thirdPartyRoomMessageData) {
     const { info } = debug(this.handleThirdPartyRoomMessage.name);
     info('handling third party room message', thirdPartyRoomMessageData);
     const {
@@ -749,40 +756,34 @@ class Base {
       html
     } = thirdPartyRoomMessageData;
 
-    return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((matrixRoomId) => {
-      return this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl).then((client) => {
-        if (senderId === undefined) {
-          info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
-          info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
-          info("if it came from a matrix client, then it's already in the client, sending again would dupe");
-          info("we use a tag on the end of messages to determine if it came from matrix");
+    const matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId);
+    const client = await this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl);
+    if (senderId === undefined) {
+      info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
+      info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
+      info("if it came from a matrix client, then it's already in the client, sending again would dupe");
+      info("we use a tag on the end of messages to determine if it came from matrix");
 
-          if (this.isTaggedMatrixMessage(text)) {
-            info('it is from matrix, so just ignore it.');
-            return;
-          } else {
-            info('it is from 3rd party client');
-          }
-        }
+      if (this.isTaggedMatrixMessage(text)) {
+        info('it is from matrix, so just ignore it.');
+        return;
+      }
+      info('it is from 3rd party client');
+    }
 
-        let tag = autoTagger(senderId, this);
+    let tag = autoTagger(senderId, this);
 
-        if (html) {
-          return client.sendMessage(matrixRoomId, {
-            body: tag(text),
-            formatted_body: html,
-            format: "org.matrix.custom.html",
-            msgtype: "m.text"
-          });
-        } else {
-          return client.sendMessage(matrixRoomId, {
-            body: tag(text),
-            msgtype: "m.text"
-          });
-        }
+    if (html) {
+      return await client.sendMessage(matrixRoomId, {
+        body: tag(text),
+        formatted_body: html,
+        format: "org.matrix.custom.html",
+        msgtype: "m.text"
       });
-    }).catch(err=>{
-      this.sendStatusMsg({}, 'Error in '+this.handleThirdPartyRoomMessage.name, err, thirdPartyRoomMessageData);
+    }
+    return await client.sendMessage(matrixRoomId, {
+      body: tag(text),
+      msgtype: "m.text"
     });
   }
 
