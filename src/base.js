@@ -885,30 +885,25 @@ class Base {
    * @param {string} avatarUrl a resource on the public web
    * @returns {Promise}
    */
-  setGhostAvatar(ghostIntent, avatarUrl) {
+  async setGhostAvatar(ghostIntent, avatarUrl) {
     const { info }  = debug(this.setGhostAvatar.name);
     const client = ghostIntent.getClient();
 
-    return ghostIntent.getProfileInfo(client.credentials.userId, 'avatar_url').then(({avatar_url})=>{
-      if (avatar_url) {
-        info('refusing to overwrite existing avatar');
-        return null;
-      } else {
-        info('downloading avatar from public web', avatarUrl);
-        return download.getBufferAndType(avatarUrl).then(({buffer, type})=> {
-          let opts = {
-            name: path.basename(avatarUrl),
-            type,
-            rawResponse: false
-          };
-          return client.uploadContent(buffer, opts);
-        }).then((res)=>{
-          const contentUri = res.content_uri;
-          info('uploaded avatar and got back content uri', contentUri);
-          return ghostIntent.setAvatarUrl(contentUri);
-        });
-      }
+    const { avatar_url } = await ghostIntent.getProfileInfo(client.credentials.userId, 'avatar_url');
+    if (avatar_url) {
+      info('refusing to overwrite existing avatar');
+      return null;
+    }
+    info('downloading avatar from public web', avatarUrl);
+    const {buffer, type} = await download.getBufferAndType(avatarUrl);
+    const res = await client.uploadContent(buffer, {
+      name: path.basename(avatarUrl),
+      type,
+      rawResponse: false
     });
+    const contentUri = res.content_uri;
+    info('uploaded avatar and got back content uri', contentUri);
+    return ghostIntent.setAvatarUrl(contentUri);
   }
 }
 
