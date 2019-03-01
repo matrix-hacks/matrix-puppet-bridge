@@ -389,7 +389,7 @@ class Base {
    *
    * @returns {Promise}
    */
-  sendStatusMsg(options={}, ...args) {
+  async sendStatusMsg(options={}, ...args) {
     if (typeof options !== 'object') {
       throw new Error('sendStatusMsg requires first parameter to be an options object which can be empty.');
     }
@@ -408,46 +408,43 @@ class Base {
     }, '');
 
     const { warn, info } = debug(this.sendStatusMsg.name);
-    return this.getStatusRoomId(options.roomAliasLocalPart).then(statusRoomId => {
-      var botIntent = this.bridge.getIntent();
-      if (botIntent === null) {
-        warn('cannot send a status message before the bridge is ready');
-        return false;
-      }
-      let promiseList = [];
+    const statusRoomId = await this.getStatusRoomId(options.roomAliasLocalPart);
+    const botIntent = this.bridge.getIntent();
+    if (botIntent === null) {
+      warn('cannot send a status message before the bridge is ready');
+      return false;
+    }
+    let promiseList = [];
 
-      promiseList.push(() => {
-        info("joining protocol bot to room >>>", statusRoomId, "<<<");
-        botIntent.join(statusRoomId);
-      });
-
-      // AS Bots don't have display names? Weird...
-      // PUT https://<REDACTED>/_matrix/client/r0/profile/%40hangoutsbot%3Aexample.org/displayname (AS) HTTP 404 Error: {"errcode":"M_UNKNOWN","error":"No row found"}
-      //promiseList.push(() => botIntent.setDisplayName(this.getServiceName() + " Bot"));
-
-      promiseList.push(() => {
-        let txt = this.tagMatrixMessage(msgText); // <-- Important! Or we will cause message looping...
-        if(options.fixedWidthOutput)
-        {
-          return botIntent.sendMessage(statusRoomId, {
-            body: txt,
-            formatted_body: "<pre><code>" + txt + "</code></pre>",
-            format: "org.matrix.custom.html",
-            msgtype: "m.notice"
-          });
-        }
-        else
-        {
-          return botIntent.sendMessage(statusRoomId, {
-            body: txt,
-            msgtype: "m.notice"
-          });
-        }
-      });
-
-      return Promise.mapSeries(promiseList, p => p());
+    promiseList.push(() => {
+      info("joining protocol bot to room >>>", statusRoomId, "<<<");
+      botIntent.join(statusRoomId);
     });
+
+    // AS Bots don't have display names? Weird...
+    // PUT https://<REDACTED>/_matrix/client/r0/profile/%40hangoutsbot%3Aexample.org/displayname (AS) HTTP 404 Error: {"errcode":"M_UNKNOWN","error":"No row found"}
+    //promiseList.push(() => botIntent.setDisplayName(this.getServiceName() + " Bot"));
+
+    promiseList.push(() => {
+      let txt = this.tagMatrixMessage(msgText); // <-- Important! Or we will cause message looping...
+      if(options.fixedWidthOutput)
+      {
+        return botIntent.sendMessage(statusRoomId, {
+          body: txt,
+          formatted_body: "<pre><code>" + txt + "</code></pre>",
+          format: "org.matrix.custom.html",
+          msgtype: "m.notice"
+        });
+      }
+      return botIntent.sendMessage(statusRoomId, {
+        body: txt,
+        msgtype: "m.notice"
+      });
+    });
+
+    return Promise.mapSeries(promiseList, p => p());
   }
+
   getGhostUserFromThirdPartySenderId(id) {
     return "@"+this.getServicePrefix()+"_"+id+":"+this.domain;
   }
