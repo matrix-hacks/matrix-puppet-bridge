@@ -66,6 +66,20 @@ const autoTagger = (senderId, self) => (text='') => {
   return out;
 };
 
+const sleep = (time) => {
+  return new Promise((res, rej) => {
+    setTimeout(() => {
+      res();
+    }, time);
+  });
+};
+
+const until = async(check) => {
+  while (check()) {
+    await sleep(100);
+  }
+};
+
 module.exports = {
   download: {
     getStream: downloadGetStream,
@@ -76,6 +90,8 @@ module.exports = {
   },
   autoTagger,
   isFilenameTagged,
+  sleep,
+  until,
 };
 
 if (!module.parent) {
