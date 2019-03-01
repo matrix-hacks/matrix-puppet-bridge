@@ -365,20 +365,16 @@ class Base {
    *
    * @returns {Promise} Promise resolving if all joins success
    */
-  joinThirdPartyUsersToStatusRoom(users) {
+  async joinThirdPartyUsersToStatusRoom(users) {
     const { info } = debug(this.getStatusRoomId.name);
 
     info("Join %s users to the status room", users.length);
-    return this.getStatusRoomId().then(statusRoomId => {
-      return Promise.each(users, (user) => {
-        return this.getIntentFromThirdPartySenderId(user.userId, user.name, user.avatarUrl)
-        .then((ghostIntent) => {
-          return ghostIntent.join(statusRoomId);
-        });
-      });
-    }).then(() => {
-      info("Contact list synced");
+    const statusRoomId = await this.getStatusRoomId();
+    await Promise.each(users, async(user) => {
+      const ghostIntent = await this.getIntentFromThirdPartySenderId(user.userId, user.name, user.avatarUrl);
+      return await ghostIntent.join(statusRoomId);
     });
+    info("Contact list synced");
   }
 
   /**
