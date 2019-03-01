@@ -28,30 +28,28 @@ const downloadGetBufferAndHeaders = url => {
   });
 };
 
-const downloadGetBufferAndType = url => {
-  return downloadGetBufferAndHeaders(url).then(({buffer, headers})=>{
-    let type, contentType = headers['content-type'];
-    if ( contentType ) {
-      type = contentType;
-    } else {
-      type = mime.lookup(urlParse(url).pathname);
-    }
-    type = type.split(';')[0];
-    return { buffer, type };
-  });
+const downloadGetBufferAndType = async(url) => {
+  const { buffer, headers } = await downloadGetBufferAndHeaders(url);
+  let type, contentType = headers['content-type'];
+  if ( contentType ) {
+    type = contentType;
+  } else {
+    type = mime.lookup(urlParse(url).pathname);
+  }
+  type = type.split(';')[0];
+  return { buffer, type };
 };
 
 const FILENAME_TAG = '_mx_'; // goes right before file extension
 const FILENAME_TAG_PATTERN = /^.+_mx_\..+$/; // check if tag is right before file extension
 
-const downloadGetTempfile = (url, opts={}) => {
+const downloadGetTempfile = async(url, opts={}) => {
   let tag = opts.tagFilename ? FILENAME_TAG : '';
-  return downloadGetBufferAndType(url).then(({ buffer, type}) => {
-    const ext = mime.extension(type);
-    const tmpfile = tmp.fileSync({ postfix: tag+'.'+ext });
-    fs.writeFileSync(tmpfile.name, buffer);
-    return { path: tmpfile.name, remove: tmpfile.removeCallback };
-  });
+  const { buffer, type } = await downloadGetBufferAndType(url);
+  const ext = mime.extension(type);
+  const tmpfile = tmp.fileSync({ postfix: tag+'.'+ext });
+  fs.writeFileSync(tmpfile.name, buffer);
+  return { path: tmpfile.name, remove: tmpfile.removeCallback };
 };
 
 const isFilenameTagged = (filepath) => !!filepath.match(FILENAME_TAG_PATTERN);
