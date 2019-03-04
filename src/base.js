@@ -537,7 +537,7 @@ class Base {
 
     let matrixRoomId;
     try {
-      const { room_id } = puppetClient.getRoomIdForAlias(roomAlias);
+      const { room_id } = await puppetClient.getRoomIdForAlias(roomAlias);
       info("found matrix room via alias. room_id:", room_id);
       matrixRoomId = room_id;
     } catch(_err) {
