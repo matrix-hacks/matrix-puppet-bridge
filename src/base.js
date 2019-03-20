@@ -563,12 +563,13 @@ class Base {
       info("the room doesn't exist. we need to create it for the first time");
       return Promise.resolve(this.getThirdPartyRoomDataById(thirdPartyRoomId)).then(thirdPartyRoomData => {
         info("got 3p room data", thirdPartyRoomData);
-        const { name, topic } = thirdPartyRoomData;
+        const { name, topic, is_direct } = thirdPartyRoomData;
         info("creating room !!!!", ">>>>"+roomAliasName+"<<<<", name, topic);
         return botIntent.createRoom({
           createAsClient: true, // bot won't auto-join the room in this case
           options: {
-            name, topic, room_alias_name: roomAliasName
+            name, topic, is_direct,
+            invite: [puppetUserId], room_alias_name: roomAliasName
           }
         }).then(({room_id}) => {
           info("room created", room_id, roomAliasName);
