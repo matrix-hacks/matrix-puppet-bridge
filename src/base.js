@@ -622,6 +622,9 @@ class Base {
     const { info } = debug(this.getUserClient.name);
     info("get user client for third party user %s (%s)", senderId, senderName);
 
+     // Why is this not just on the base object?
+    const puppetClient = this.puppet.getClient()
+
     if (senderId === undefined) {
       return Promise.resolve(this.puppet.getClient());
     } else {
@@ -643,7 +646,11 @@ class Base {
         .then((ghostIntent) => {
           return this.getStatusRoomId()
             .then(statusRoomId => ghostIntent.join(statusRoomId))
-            .then(() => ghostIntent.join(roomId))
+            .then(() => puppetClient.invite(roomId, ghostIntent.client.credentials.userId))
+              // This will error badly if the ghost is already in the room, so we catch it. Is it easy to check if ghost is already in the room?
+              // FIXME: An empty catch feels pretty evil, but I don't know the language or codebase well enough to do better
+              .catch()
+            .then(() => ghostIntent.join(roomId))  // Interestingly. this doesn't error if the ghost is already in the room
             .then(() => ghostIntent.getClient());
         });
     }
