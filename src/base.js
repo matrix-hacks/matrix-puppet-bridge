@@ -273,20 +273,6 @@ class Base {
   }
 
   /**
-   * Returns a promise
-   */
-  async _joinPuppetClientToRoom(matrixRoomId) {
-    const botIntent = this.getIntentFromApplicationServerBot();
-    const botClient = botIntent.getClient();
-
-    const puppetClient = this.puppet.getClient();
-    const puppetUserId = puppetClient.credentials.userId;
-
-    await botClient.invite(matrixRoomId, puppetUserId);
-    await puppetClient.joinRoom(matrixRoomId);
-  }
-
-  /**
    * Async call to get the status room ID
    *
    * @params {_roomAliasLocalPart} Optional, the room alias local part
@@ -578,7 +564,7 @@ class Base {
       });
     }).then(matrixRoomId => {
       info("making puppet join room", matrixRoomId);
-      return this._joinPuppetClientToRoom(matrixRoomId).then(()=>{
+      return puppetClient.joinRoom(matrixRoomId).then(()=>{
         info("returning room id after join room attempt", matrixRoomId);
         return grantPuppetMaxPowerLevel(matrixRoomId);
       }, (err) => {
