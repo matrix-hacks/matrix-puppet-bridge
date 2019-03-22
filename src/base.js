@@ -531,14 +531,52 @@ class Base {
     const puppetUserId = puppetClient.credentials.userId;
 
     const grantPuppetMaxPowerLevel = (room_id) => {
-      info("ensuring puppet user has full power over this room");
-      return botIntent.setPowerLevel(room_id, puppetUserId, 100).then(()=>{
-        info('granted puppet client admin status on the protocol status room');
-      }).catch((err)=>{
-        warn(err);
-        warn('ignoring failed attempt to give puppet client admin on the status room');
-      }).then(()=> {
-        return room_id;
+      info("ensuring puppet user has full power over this room:", room_id);
+      const pwrLevel = botIntent.opts.backingStore.getPowerLevelContent(room_id);
+
+      let prom;
+      if (pwrLevel)
+      {
+        prom = Promise.resolve(pwrLevel);
+      }
+      else
+      {
+        prom = Promise.resolve()
+        .then(() => {
+          info("attempting to retrieve power levels with puppet user on room_id:", room_id);
+          return puppetClient.getStateEvent(room_id, "m.room.power_levels", "");
+        })
+        .catch(() => {
+          info("ignoring failed attempt at retrieving power levels with puppet user on room_id:", room_id);
+          info("re-attempting to retrieve power levels with bot user on room_id:", room_id);
+          return botIntent.client.getStateEvent(room_id, "m.room.power_levels", "")
+        })
+      }
+
+      return prom.then((pwrEvent) => {
+        botIntent.opts.backingStore.setPowerLevelContent(room_id, pwrEvent);
+
+        if (pwrEvent.users[puppetUserId] == 100)
+        {
+          info("puppet already has full control over room:", room_id);
+          return room_id;
+        }
+
+        return botIntent.setPowerLevel(room_id, puppetUserId, 100).then(()=>{
+          info('granted puppet client admin status on the room:', room_id);
+        }).catch((err)=>{
+          warn(err);
+          warn('ignoring failed attempt to give puppet client admin on:', room_id);
+        }).then(()=> {
+          return botIntent.leave(room_id).then(()=> {
+            info('bot left room:', room_id);
+          }).catch((err)=>{
+            warn(err);
+            warn('ignoring failed attempt to have bot leave room:', room_id);
+          }).then(()=>{
+            return room_id;
+          });
+        });
       });
     };
 
@@ -615,6 +653,9 @@ class Base {
     const { info } = debug(this.getUserClient.name);
     info("get user client for third party user %s (%s)", senderId, senderName);
 
+     // Why is this not just on the base object?
+    const puppetClient = this.puppet.getClient()
+
     if (senderId === undefined) {
       return Promise.resolve(this.puppet.getClient());
     } else {
@@ -636,7 +677,11 @@ class Base {
         .then((ghostIntent) => {
           return this.getStatusRoomId()
             .then(statusRoomId => ghostIntent.join(statusRoomId))
-            .then(() => ghostIntent.join(roomId))
+            .then(() => puppetClient.invite(roomId, ghostIntent.client.credentials.userId))
+              // This will error badly if the ghost is already in the room, so we catch it. Is it easy to check if ghost is already in the room?
+              // FIXME: An empty catch feels pretty evil, but I don't know the language or codebase well enough to do better
+              .catch()
+            .then(() => ghostIntent.join(roomId))  // Interestingly. this doesn't error if the ghost is already in the room
             .then(() => ghostIntent.getClient());
         });
     }
