@@ -677,11 +677,10 @@ class Base {
         .then((ghostIntent) => {
           return this.getStatusRoomId()
             .then(statusRoomId => ghostIntent.join(statusRoomId))
-            .then(() => puppetClient.invite(roomId, ghostIntent.client.credentials.userId))
-              // This will error badly if the ghost is already in the room, so we catch it. Is it easy to check if ghost is already in the room?
-              // FIXME: An empty catch feels pretty evil, but I don't know the language or codebase well enough to do better
-              .catch()
-            .then(() => ghostIntent.join(roomId))  // Interestingly. this doesn't error if the ghost is already in the room
+            .then(() => ghostIntent.join(roomId)).catch(
+              puppetClient.invite(roomId, ghostIntent.client.credentials.userId)
+              .then(() => ghostIntent.join(roomId))
+            )
             .then(() => ghostIntent.getClient());
         });
     }
