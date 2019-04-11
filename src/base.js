@@ -628,6 +628,29 @@ class Base {
     return await ghostIntent.getClient();
   }
 
+  messageIsFromThirdParty(senderId, messageText, attachedFilePath = '') {
+    const { info, warn } = debug(this.handleThirdPartyRoomImageMessage.name);
+
+    let isThirdParty = true;
+    if (senderId === undefined) {
+      info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
+      info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
+      info("if it came from a matrix client, then it's already in the client, sending again would dupe");
+      info("we use a tag on the end of messages to determine if it came from matrix");
+
+      if (typeof messageText === 'undefined') {
+        info("we can't know if this message is from matrix or not, so just ignore it");
+        isThirdParty = false;
+      }
+      if (this.isTaggedMatrixMessage(messageText) || isFilenameTagged(attachedFilePath || '')) {
+        info('it is from matrix, so just ignore it.');
+        isThirdParty = false;
+      }
+      info('it is from 3rd party client');
+    }
+    return isThirdParty;
+  }
+
   /**
    * Returns a promise
    */
@@ -648,21 +671,9 @@ class Base {
 
     const matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId);
     const client = await this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl);
-    if (senderId === undefined) {
-      info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
-      info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
-      info("if it came from a matrix client, then it's already in the client, sending again would dupe");
-      info("we use a tag on the end of messages to determine if it came from matrix");
 
-      if (typeof text === 'undefined') {
-        info("we can't know if this message is from matrix or not, so just ignore it");
-        return;
-      }
-      if (this.isTaggedMatrixMessage(text) || isFilenameTagged(path || url || '')) {
-        info('it is from matrix, so just ignore it.');
-        return;
-      }
-      info('it is from 3rd party client');
+    if (!this.messageIsFromThirdParty(senderId, text, url || path)) {
+      return;
     }
 
     let upload = async(buffer, opts) => {
@@ -706,7 +717,19 @@ class Base {
     info('uploaded to', content_uri);
     let msg = tag(text);
     let opts = { mimetype, h, w, size };
-    return await client.sendImageMessage(matrixRoomId, content_uri, opts, msg);
+    console.log("mimetype is: %s", mimetype);
+
+    if (mimetype.includes("image")) {
+      return await client.sendImageMessage(matrixRoomId, content_uri, opts, msg);
+    } else {
+      const content = {
+           msgtype: "m.video",
+           url: content_uri,
+           info: opts,
+           body: msg,
+    };
+      return await client.sendMessage(matrixRoomId, content);
+    }
   }
 
   /**
@@ -733,17 +756,9 @@ class Base {
 
     const matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId);
     const client = await this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl);
-    if (senderId === undefined) {
-      info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
-      info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
-      info("if it came from a matrix client, then it's already in the client, sending again would dupe");
-      info("we use a tag on the end of messages to determine if it came from matrix");
 
-      if (this.isTaggedMatrixMessage(text)) {
-        info('it is from matrix, so just ignore it.');
-        return;
-      }
-      info('it is from 3rd party client');
+    if (!this.messageIsFromThirdParty(senderId, text)) {
+      return;
     }
 
     let tag = autoTagger(senderId, this);
