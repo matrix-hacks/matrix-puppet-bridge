@@ -4,12 +4,12 @@ const fs = require('fs');
 const readFile = Promise.promisify(fs.readFile);
 const writeFile = Promise.promisify(fs.writeFile);
 const read = Promise.promisify(require('read'));
+const utils = require('./utils');
 const whyPuppeting = 'https://github.com/kfatehi/matrix-appservice-imessage/commit/8a832051f79a94d7330be9e252eea78f76d774bc';
 
-const readConfigFile = (jsonFile) => {
-  return readFile(jsonFile).then(buffer => {
-    return JSON.parse(buffer);
-  });
+const readConfigFile = async(jsonFile) => {
+  const buffer = await readFile(jsonFile);
+  return JSON.parse(buffer);
 };
 
 /**
@@ -34,49 +34,49 @@ class Puppet {
    *
    * @returns {Promise} Returns a promise resolving the MatrixClient
    */
-  startClient() {
-    return readConfigFile(this.jsonFile).then(config => {
-      this.id = config.puppet.id;
-      return matrixSdk.createClient({
-        baseUrl: config.bridge.homeserverUrl,
-        userId: config.puppet.id,
-        accessToken: config.puppet.token
-      });
-    }).then(_matrixClient => {
-      this.client = _matrixClient;
-      this.client.startClient();
-      return new Promise((resolve, _reject) => {
-        this.matrixRoomMembers = {};
-        this.client.on("RoomState.members", (event, state, _member) => {
-          this.matrixRoomMembers[state.roomId] = Object.keys(state.members);
-        });
+  async startClient() {
+    const config = await readConfigFile(this.jsonFile);
+    this.id = config.puppet.id;
+    this.client = matrixSdk.createClient({
+      baseUrl: config.bridge.homeserverUrl,
+      userId: config.puppet.id,
+      accessToken: config.puppet.token
+    });
+    this.client.startClient();
 
-        this.client.on("Room.receipt", (event, room) => {
-          if (this.app === null) {
-            return;
-          }
+    this.matrixRoomMembers = {};
 
-          if (room.roomId in this.thirdPartyRooms) {
-            let content = event.getContent();
-            for (var eventId in content) {
-              for (var userId in content[eventId]['m.read']) {
-                if (userId === this.id) {
-                  console.log("Receive a read event from ourself");
-                  return this.app.sendReadReceiptAsPuppetToThirdPartyRoomWithId(this.thirdPartyRooms[room.roomId]);
-                }
-              }
+    this.client.on("RoomState.members", (event, state, _member) => {
+      this.matrixRoomMembers[state.roomId] = Object.keys(state.members);
+    });
+
+    this.client.on("Room.receipt", (event, room) => {
+      if (this.app === null) {
+        return;
+      }
+
+      if (room.roomId in this.thirdPartyRooms) {
+        let content = event.getContent();
+        for (var eventId in content) {
+          for (var userId in content[eventId]['m.read']) {
+            if (userId === this.id) {
+              console.log("Receive a read event from ourself");
+              return this.app.sendReadReceiptAsPuppetToThirdPartyRoomWithId(this.thirdPartyRooms[room.roomId]);
             }
           }
-        });
-
-        this.client.on('sync', (state) => {
-          if ( state === 'PREPARED' ) {
-            console.log('synced');
-            resolve();
-          }
-        });
-      });
+        }
+      }
     });
+
+    let isSynced = false;
+    this.client.on('sync', (state) => {
+      if ( state === 'PREPARED' ) {
+        console.log('synced');
+        isSynced = true;
+      }
+    });
+
+    await utils.until(() => !isSynced);
   }
 
   /**
@@ -103,36 +103,29 @@ class Puppet {
    *
    * @returns {Promise}
    */
-  associate() {
-    return readConfigFile(this.jsonFile).then(config => {
-      console.log([
-        'This bridge performs matrix user puppeting.',
-        'This means that the bridge logs in as your user and acts on your behalf',
-        'For the rationale, see '+whyPuppeting
-      ].join('\n'));
-      console.log("Enter your user's localpart");
-      return read({ silent: false }).then(localpart => {
-        let id = '@'+localpart+':'+config.bridge.domain;
-        console.log("Enter password for "+id);
-        return read({ silent: true, replace: '*' }).then(password => {
-          return { localpart, id, password };
-        });
-      }).then(({localpart, id, password}) => {
-        let matrixClient = matrixSdk.createClient(config.bridge.homeserverUrl);
-        return matrixClient.loginWithPassword(id, password).then(accessDat => {
-          console.log("log in success");
-          return writeFile(this.jsonFile, JSON.stringify(Object.assign({}, config, {
-            puppet: {
-              id,
-              localpart, 
-              token: accessDat.access_token
-            }
-          }), null, 2)).then(()=>{
-            console.log('Updated config file '+this.jsonFile);
-          });
-        });
-      });
-    });
+  async associate() {
+    const config = readConfigFile(this.jsonFile);
+    console.log([
+      'This bridge performs matrix user puppeting.',
+      'This means that the bridge logs in as your user and acts on your behalf',
+      'For the rationale, see '+whyPuppeting
+    ].join('\n'));
+    console.log("Enter your user's localpart");
+    const localpart = await read({ silent: false });
+    let id = '@'+localpart+':'+config.bridge.domain;
+    console.log("Enter password for "+id);
+    const password = await read({ silent: true, replace: '*' });
+    let matrixClient = matrixSdk.createClient(config.bridge.homeserverUrl);
+    const accessDat = await matrixClient.loginWithPassword(id, password);
+    console.log("log in success");
+    await writeFile(this.jsonFile, JSON.stringify(Object.assign({}, config, {
+      puppet: {
+        id,
+        localpart,
+        token: accessDat.access_token
+      }
+    }), null, 2));
+    console.log('Updated config file '+this.jsonFile);
   }
 
   /**

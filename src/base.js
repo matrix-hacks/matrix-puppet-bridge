@@ -12,7 +12,7 @@ const fs = require('fs');
  * Extend your app from this class to get started.
  *
  *
- * @example 
+ * @example
  * // The following example is from {@link https://github.com/matrix-hacks/matrix-puppet-facebook|the facebook bridge}
 const {
   MatrixAppServiceBridge: {
@@ -48,25 +48,23 @@ class App extends MatrixPuppetBridgeBase {
     });
     return this.thirdPartyClient.login();
   }
-  getThirdPartyUserDataById(id) {
-    return this.thirdPartyClient.getUserInfoById(id).then(userInfo=>{
-      debug('got user data', userInfo);
-      return { senderName: userInfo.name };
-    });
+  async getThirdPartyUserDataById(id) {
+    const userInfo = await this.thirdPartyClient.getUserInfoById(id);
+    debug('got user data', userInfo);
+    return { senderName: userInfo.name };
   }
-  getThirdPartyRoomDataById(threadId) {
+  async getThirdPartyRoomDataById(threadId) {
     debug('getting third party room data by thread id', threadId);
     let label = this.threadInfo[threadId].isGroup ? "Group" : "Friend";
-    return this.thirdPartyClient.getThreadInfo(threadId).then(data=>{
-      let roomData = {
-        name: data.name,
-        topic: `Facebook ${label}`
-      };
-      debug('room data', roomData);
-      return roomData;
-    });
+    const data = await this.thirdPartyClient.getThreadInfo(threadId);
+    let roomData = {
+      name: data.name,
+      topic: `Facebook ${label}`
+    };
+    debug('room data', roomData);
+    return roomData;
   }
-  sendMessageAsPuppetToThirdPartyRoomWithId(id, text) {
+  async sendMessageAsPuppetToThirdPartyRoomWithId(id, text) {
     return this.thirdPartyClient.sendMessage(id, text);
   }
 }
@@ -74,31 +72,31 @@ class App extends MatrixPuppetBridgeBase {
 new Cli({
   port: config.port,
   registrationPath: config.registrationPath,
-  generateRegistration: function(reg, callback) {
-    puppet.associate().then(()=>{
+  generateRegistration: async(reg, callback) => {
+    try {
+      await puppet.associate();
       reg.setId(AppServiceRegistration.generateToken());
       reg.setHomeserverToken(AppServiceRegistration.generateToken());
       reg.setAppServiceToken(AppServiceRegistration.generateToken());
       reg.setSenderLocalpart("facebookbot");
       reg.addRegexPattern("users", "@facebook_.*", true);
       callback(reg);
-    }).catch(err=>{
+    } catch(err) {
       console.error(err.message);
       process.exit(-1);
-    });
+    }
   },
-  run: function(port) {
+  run: async(port) => {
     const app = new App(config, puppet);
-    return puppet.startClient().then(()=>{
-      return app.initThirdPartyClient();
-    }).then(() => {
-      return app.bridge.run(port, config);
-    }).then(()=>{
+    try {
+      await puppet.startClient();
+      await app.initThirdPartyClient();
+      await app.bridge.run(port, config);
       console.log('Matrix-side listening on port %s', port);
-    }).catch(err=>{
+    } catch(err) {
       console.error(err.message);
       process.exit(-1);
-    });
+    }
   }
 }).run();
  */
@@ -142,8 +140,8 @@ class Base {
    * @param {object} _matrixEvent
    * @returns {Promise}
    */
-  sendMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _messageText, _matrixEvent) {
-    return Promise.reject(new Error('please implement sendMessageAsPuppetToThirdPartyRoomWithId'));
+  async sendMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _messageText, _matrixEvent) {
+    throw new Error('please implement sendMessageAsPuppetToThirdPartyRoomWithId');
   }
 
   /**
@@ -154,8 +152,8 @@ class Base {
    * @param {object} _matrixEvent
    * @returns {Promise}
    */
-  sendImageMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent) {
-    return Promise.reject(new Error('please implement sendImageMessageAsPuppetToThirdPartyRoomWithId'));
+  async sendImageMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent) {
+    throw new Error('please implement sendImageMessageAsPuppetToThirdPartyRoomWithId');
   }
 
   /**
@@ -166,8 +164,8 @@ class Base {
    * @param {object} _matrixEvent
    * @returns {Promise}
    */
-  sendFileMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent) {
-    return Promise.reject(new Error('please implement sendFileMessageAsPuppetToThirdPartyRoomWithId'));
+  async sendFileMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent) {
+    throw new Error('please implement sendFileMessageAsPuppetToThirdPartyRoomWithId');
   }
 
   /**
@@ -176,8 +174,8 @@ class Base {
    * @param {string} _thirdPartyRoomId
    * @returns {Promise}
    */
-  sendReadReceiptAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId) {
-    return Promise.reject(new Error('please implement sendReadReceiptAsPuppetToThirdPartyRoomWithId'));
+  async sendReadReceiptAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId) {
+    throw new Error('please implement sendReadReceiptAsPuppetToThirdPartyRoomWithId');
   }
 
   /**
@@ -225,7 +223,7 @@ class Base {
    * @param {string} thirdPartyRoomId The unique identifier on the third party's side
    * @returns {Promise} Resolve with an object like {senderName: 'some name'}
    */
-  getThirdPartyUserDataById(_thirdPartyUserId) {
+  async getThirdPartyUserDataById(_thirdPartyUserId) {
     throw new Error("override me and return or resolve a promise with at least {senderName: 'some name'}, otherwise provide it in the original payload and i will never be invoked");
   }
   /**
@@ -234,7 +232,7 @@ class Base {
    * @param {string} thirdPartyRoomId The unique identifier on the third party's side
    * @returns {Promise} Resolve with an object like { name:string, topic:string }
    */
-  getThirdPartyRoomDataById(_thirdPartyRoomId) {
+  async getThirdPartyRoomDataById(_thirdPartyRoomId) {
     throw new Error("override me");
   }
 
@@ -286,13 +284,30 @@ class Base {
     await puppetClient.joinRoom(matrixRoomId);
   }
 
+  async _grantPuppetMaxPowerLevel(room_id) {
+    const { info, warn } = debug(this._grantPuppetMaxPowerLevel.name);
+    const puppetClient = this.puppet.getClient();
+    const puppetUserId = puppetClient.credentials.userId;
+
+    const botIntent = this.getIntentFromApplicationServerBot();
+    info("ensuring puppet user has full power over this room");
+    try {
+      await botIntent.setPowerLevel(room_id, puppetUserId, 100);
+      info('granted puppet client admin status on the protocol status room');
+    } catch(err) {
+      warn(err);
+      warn('ignoring failed attempt to give puppet client admin on the status room');
+    }
+    return room_id;
+  }
+
   /**
    * Async call to get the status room ID
    *
    * @params {_roomAliasLocalPart} Optional, the room alias local part
    * @returns {Promise} Promise resolving the Matrix room ID of the status room
    */
-  getStatusRoomId(_roomAliasLocalPart) {
+  async getStatusRoomId(_roomAliasLocalPart) {
     const { info, warn } = debug(this.getStatusRoomId.name);
     const roomAliasLocalPart = _roomAliasLocalPart || this.getServicePrefix()+"_"+this.getStatusRoomPostfix();
     const roomAlias = "#"+roomAliasLocalPart+":"+this.domain;
@@ -301,55 +316,42 @@ class Base {
     const botIntent = this.getIntentFromApplicationServerBot();
     const botClient = botIntent.getClient();
 
-    const puppetUserId = puppetClient.credentials.userId;
-
-    const grantPuppetMaxPowerLevel = (room_id) => {
-      info("ensuring puppet user has full power over this room");
-      return botIntent.setPowerLevel(room_id, puppetUserId, 100).then(()=>{
-        info('granted puppet client admin status on the protocol status room');
-      }).catch((err)=>{
-        warn(err);
-        warn('ignoring failed attempt to give puppet client admin on the status room');
-      }).then(()=> {
-        return room_id;
-      });
-    };
-
     info('looking up', roomAlias);
-    return puppetClient.getRoomIdForAlias(roomAlias).then(({room_id}) => {
+    let matrixRoomId;
+    try {
+      const { room_id } = await puppetClient.getRoomIdForAlias(roomAlias);
       info("found matrix room via alias. room_id:", room_id);
-      return grantPuppetMaxPowerLevel(room_id);
-    }, (_err) => {
+      await this._grantPuppetMaxPowerLevel(room_id);
+      matrixRoomId = room_id;
+    } catch(_err) {
       const name = this.getServiceName() + " Protocol";
       const topic = this.getServiceName() + " Protocol Status Messages";
       info("creating status room !!!!", ">>>>"+roomAliasLocalPart+"<<<<", name, topic);
-      return botIntent.createRoom({
+      const { room_id } = await botIntent.createRoom({
         createAsClient: false,
         options: {
           name, topic, room_alias_name: roomAliasLocalPart
         }
-      }).then(({room_id}) => {
-        info("status room created", room_id, roomAliasLocalPart);
-        return room_id;
       });
-    }).then(matrixRoomId => {
-      info("making puppet join protocol status room", matrixRoomId);
-      return puppetClient.joinRoom(matrixRoomId).then(() => {
-        info("puppet joined the protocol status room");
-        return grantPuppetMaxPowerLevel(matrixRoomId);
-      }, (err) => {
-        if (err.message === 'No known servers') {
-          warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
-          return botClient.deleteAlias(roomAlias).then(()=>{
-            warn('deleted alias... trying again to get or create room.');
-            return this.getStatusRoomId(_roomAliasLocalPart);
-          });
-        } else {
-          warn("ignoring error from puppet join room: ", err.message);
-          return matrixRoomId;
-        }
-      });
-    });
+      info("status room created", room_id, roomAliasLocalPart);
+      matrixRoomId = room_id;
+    }
+
+    info("making puppet join protocol status room", matrixRoomId);
+    try {
+      await puppetClient.joinRoom(matrixRoomId);
+      info("puppet joined the protocol status room");
+      await this._grantPuppetMaxPowerLevel(matrixRoomId);
+    } catch(err) {
+      if (err.message === 'No known servers') {
+        warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
+        await botClient.deleteAlias(roomAlias);
+        warn('deleted alias... trying again to get or create room.');
+        return await this.getStatusRoomId(_roomAliasLocalPart);
+      }
+      warn("ignoring error from puppet join room: ", err.message);
+    }
+    return matrixRoomId;
   }
 
   /**
@@ -362,20 +364,16 @@ class Base {
    *
    * @returns {Promise} Promise resolving if all joins success
    */
-  joinThirdPartyUsersToStatusRoom(users) {
+  async joinThirdPartyUsersToStatusRoom(users) {
     const { info } = debug(this.getStatusRoomId.name);
 
     info("Join %s users to the status room", users.length);
-    return this.getStatusRoomId().then(statusRoomId => {
-      return Promise.each(users, (user) => {
-        return this.getIntentFromThirdPartySenderId(user.userId, user.name, user.avatarUrl)
-        .then((ghostIntent) => {
-          return ghostIntent.join(statusRoomId);
-        });
-      });
-    }).then(() => {
-      info("Contact list synced");
+    const statusRoomId = await this.getStatusRoomId();
+    await Promise.each(users, async(user) => {
+      const ghostIntent = await this.getIntentFromThirdPartySenderId(user.userId, user.name, user.avatarUrl);
+      return await ghostIntent.join(statusRoomId);
     });
+    info("Contact list synced");
   }
 
   /**
@@ -386,7 +384,7 @@ class Base {
    *
    * @returns {Promise}
    */
-  sendStatusMsg(options={}, ...args) {
+  async sendStatusMsg(options={}, ...args) {
     if (typeof options !== 'object') {
       throw new Error('sendStatusMsg requires first parameter to be an options object which can be empty.');
     }
@@ -405,46 +403,43 @@ class Base {
     }, '');
 
     const { warn, info } = debug(this.sendStatusMsg.name);
-    return this.getStatusRoomId(options.roomAliasLocalPart).then(statusRoomId => {
-      var botIntent = this.bridge.getIntent();
-      if (botIntent === null) {
-        warn('cannot send a status message before the bridge is ready');
-        return false;
-      }
-      let promiseList = [];
+    const statusRoomId = await this.getStatusRoomId(options.roomAliasLocalPart);
+    const botIntent = this.bridge.getIntent();
+    if (botIntent === null) {
+      warn('cannot send a status message before the bridge is ready');
+      return false;
+    }
+    let promiseList = [];
 
-      promiseList.push(() => {
-        info("joining protocol bot to room >>>", statusRoomId, "<<<");
-        botIntent.join(statusRoomId);
-      });
-
-      // AS Bots don't have display names? Weird...
-      // PUT https://<REDACTED>/_matrix/client/r0/profile/%40hangoutsbot%3Aexample.org/displayname (AS) HTTP 404 Error: {"errcode":"M_UNKNOWN","error":"No row found"}
-      //promiseList.push(() => botIntent.setDisplayName(this.getServiceName() + " Bot"));
-
-      promiseList.push(() => {
-        let txt = this.tagMatrixMessage(msgText); // <-- Important! Or we will cause message looping...
-        if(options.fixedWidthOutput)
-        {
-          return botIntent.sendMessage(statusRoomId, {
-            body: txt,
-            formatted_body: "<pre><code>" + txt + "</code></pre>",
-            format: "org.matrix.custom.html",
-            msgtype: "m.notice"
-          });
-        }
-        else
-        {
-          return botIntent.sendMessage(statusRoomId, {
-            body: txt,
-            msgtype: "m.notice"
-          });
-        }
-      });
-
-      return Promise.mapSeries(promiseList, p => p());
+    promiseList.push(() => {
+      info("joining protocol bot to room >>>", statusRoomId, "<<<");
+      botIntent.join(statusRoomId);
     });
+
+    // AS Bots don't have display names? Weird...
+    // PUT https://<REDACTED>/_matrix/client/r0/profile/%40hangoutsbot%3Aexample.org/displayname (AS) HTTP 404 Error: {"errcode":"M_UNKNOWN","error":"No row found"}
+    //promiseList.push(() => botIntent.setDisplayName(this.getServiceName() + " Bot"));
+
+    promiseList.push(() => {
+      let txt = this.tagMatrixMessage(msgText); // <-- Important! Or we will cause message looping...
+      if(options.fixedWidthOutput)
+      {
+        return botIntent.sendMessage(statusRoomId, {
+          body: txt,
+          formatted_body: "<pre><code>" + txt + "</code></pre>",
+          format: "org.matrix.custom.html",
+          msgtype: "m.notice"
+        });
+      }
+      return botIntent.sendMessage(statusRoomId, {
+        body: txt,
+        msgtype: "m.notice"
+      });
+    });
+
+    return Promise.mapSeries(promiseList, p => p());
   }
+
   getGhostUserFromThirdPartySenderId(id) {
     return "@"+this.getServicePrefix()+"_"+id+":"+this.domain;
   }
@@ -484,7 +479,7 @@ class Base {
    *
    * @returns {Promise} A promise resolving to an Intent
    */
-  getIntentFromThirdPartySenderId(userId, name, avatarUrl) {
+  async getIntentFromThirdPartySenderId(userId, name, avatarUrl) {
     const ghostIntent = this.bridge.getIntent(this.getGhostUserFromThirdPartySenderId(userId));
 
     let promiseList = [];
@@ -494,7 +489,8 @@ class Base {
     if (avatarUrl)
       promiseList.push(this.setGhostAvatar(ghostIntent, avatarUrl));
 
-    return Promise.all(promiseList).then(() => ghostIntent);
+    await Promise.all(promiseList);
+    return ghostIntent;
   }
 
   getIntentFromApplicationServerBot() {
@@ -510,31 +506,27 @@ class Base {
    * @param {string} thirdPartyUserId
    * @returns {Promise} A promise resolving to a {RemoteUser}
    */
-  getOrInitRemoteUserStoreDataFromThirdPartyUserId(thirdPartyUserId) {
+  async getOrInitRemoteUserStoreDataFromThirdPartyUserId(thirdPartyUserId) {
     const { info } = debug(this.getOrInitRemoteUserStoreDataFromThirdPartyUserId.name);
     const userStore = this.bridge.getUserStore();
-    return userStore.getRemoteUser(thirdPartyUserId).then(rUser=>{
-      if ( rUser ) {
-        info("found existing remote user in store", rUser);
-        return rUser;
-      } else {
-        info("did not find existing remote user in store, we must create it now");
-        return this.getThirdPartyUserDataById(thirdPartyUserId).then(thirdPartyUserData => {
-          info("got 3p user data:", thirdPartyUserData);
-          return new RemoteUser(thirdPartyUserId, {
-            senderName: thirdPartyUserData.senderName
-          });
-        }).then(rUser => {
-          return userStore.setRemoteUser(rUser);
-        }).then(()=>{
-          return userStore.getRemoteUser(thirdPartyUserId);
-        }).then(rUser => {
-          return rUser;
-        });
-      }
+    let rUser = await userStore.getRemoteUser(thirdPartyUserId);
+    if ( rUser ) {
+      info("found existing remote user in store", rUser);
+      return rUser;
+    }
+
+    info("did not find existing remote user in store, we must create it now");
+    const thirdPartyUserData = await this.getThirdPartyUserDataById(thirdPartyUserId);
+    info("got 3p user data:", thirdPartyUserData);
+
+    rUser = new RemoteUser(thirdPartyUserId, {
+      senderName: thirdPartyUserData.senderName
     });
+    await userStore.setRemoteUser(rUser);
+    return await userStore.getRemoteUser(thirdPartyUserId);
   }
-  getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId) {
+
+  async getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId) {
     const { warn, info } = debug(this.getOrCreateMatrixRoomFromThirdPartyRoomId.name);
     const roomAlias = this.getRoomAliasFromThirdPartyRoomId(thirdPartyRoomId);
     const roomAliasName = this.getRoomAliasLocalPartFromThirdPartyRoomId(thirdPartyRoomId);
@@ -542,75 +534,59 @@ class Base {
     const puppetClient = this.puppet.getClient();
     const botIntent = this.getIntentFromApplicationServerBot();
     const botClient = botIntent.getClient();
-    const puppetUserId = puppetClient.credentials.userId;
 
-    const grantPuppetMaxPowerLevel = (room_id) => {
-      info("ensuring puppet user has full power over this room");
-      return botIntent.setPowerLevel(room_id, puppetUserId, 100).then(()=>{
-        info('granted puppet client admin status on the protocol status room');
-      }).catch((err)=>{
-        warn(err);
-        warn('ignoring failed attempt to give puppet client admin on the status room');
-      }).then(()=> {
-        return room_id;
-      });
-    };
-
-    return puppetClient.getRoomIdForAlias(roomAlias).then(({room_id}) => {
+    let matrixRoomId;
+    try {
+      const { room_id } = await puppetClient.getRoomIdForAlias(roomAlias);
       info("found matrix room via alias. room_id:", room_id);
-      return room_id;
-    }, (_err) => {
+      matrixRoomId = room_id;
+    } catch(_err) {
       info("the room doesn't exist. we need to create it for the first time");
-      return Promise.resolve(this.getThirdPartyRoomDataById(thirdPartyRoomId)).then(thirdPartyRoomData => {
-        info("got 3p room data", thirdPartyRoomData);
-        const { name, topic } = thirdPartyRoomData;
-        info("creating room !!!!", ">>>>"+roomAliasName+"<<<<", name, topic);
-        return botIntent.createRoom({
-          createAsClient: true, // bot won't auto-join the room in this case
-          options: {
-            name, topic, room_alias_name: roomAliasName
-          }
-        }).then(({room_id}) => {
-          info("room created", room_id, roomAliasName);
-          return room_id;
-        });
-      });
-    }).then(matrixRoomId => {
-      info("making puppet join room", matrixRoomId);
-      return this._joinPuppetClientToRoom(matrixRoomId).then(()=>{
-        info("returning room id after join room attempt", matrixRoomId);
-        return grantPuppetMaxPowerLevel(matrixRoomId);
-      }, (err) => {
-        if ( err.message === 'No known servers' ) {
-          warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
-          return botClient.deleteAlias(roomAlias).then(()=>{
-            warn('deleted alias... trying again to get or create room.');
-            return this.getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId);
-          });
-        } else {
-          warn("ignoring error from puppet join room: ", err.message);
-          return matrixRoomId;
+      const thirdPartyRoomData = await this.getThirdPartyRoomDataById(thirdPartyRoomId);
+      info("got 3p room data", thirdPartyRoomData);
+      const { name, topic } = thirdPartyRoomData;
+      info("creating room !!!!", ">>>>"+roomAliasName+"<<<<", name, topic);
+      const { room_id } = await botIntent.createRoom({
+        createAsClient: true, // bot won't auto-join the room in this case
+        options: {
+          name, topic, room_alias_name: roomAliasName
         }
-      });
-    }).then(matrixRoomId => {
-      info("setting room as invite-only", matrixRoomId);
-      return puppetClient.sendStateEvent(matrixRoomId, "m.room.join_rules", {"join_rule": "invite"}).then(() =>{
-        info("succeeded in setting room as invite-only using puppet client. Room:", matrixRoomId);
-        return matrixRoomId;
-      }, (err) => {
-        info("Since setting join rules with puppet client failed, now trying with bot client");
-        return botIntent.sendStateEvent(matrixRoomId, "m.room.join_rules", "", {"join_rule": "invite"}).then(()=>{
-          info("succeeded in setting room as invite-only using bot client. Room:", matrixRoomId);
-          return matrixRoomId;
-        }, (err) => {
-          warn("Both puppet and bot client invite only settings failed :( Error:", err.message);
-          return matrixRoomId;
-        });
-      });
-    }).then(matrixRoomId => {
-      this.puppet.saveThirdPartyRoomId(matrixRoomId, thirdPartyRoomId);
-      return matrixRoomId;
-    });
+      })
+      info("room created", room_id, roomAliasName);
+      matrixRoomId = room_id;
+    }
+
+    info("making puppet join room", matrixRoomId);
+    try {
+      await this._joinPuppetClientToRoom(matrixRoomId);
+      info("returning room id after join room attempt", matrixRoomId);
+      await this._grantPuppetMaxPowerLevel(matrixRoomId);
+    } catch(err) {
+      if ( err.message === 'No known servers' ) {
+        warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
+        await botClient.deleteAlias(roomAlias);
+        warn('deleted alias... trying again to get or create room.');
+        matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId);
+      } else {
+        warn("ignoring error from puppet join room: ", err.message);
+      }
+    }
+
+    info("setting room as invite-only", matrixRoomId);
+    try {
+      await puppetClient.sendStateEvent(matrixRoomId, "m.room.join_rules", {"join_rule": "invite"});
+      info("succeeded in setting room as invite-only using puppet client. Room:", matrixRoomId);
+    } catch(err) {
+      info("Since setting join rules with puppet client failed, now trying with bot client");
+      try {
+        await botIntent.sendStateEvent(matrixRoomId, "m.room.join_rules", "", {"join_rule": "invite"});
+        info("succeeded in setting room as invite-only using bot client. Room:", matrixRoomId);
+      } catch(err) {
+        warn("Both puppet and bot client invite only settings failed :( Error:", err.message);
+      }
+    }
+    this.puppet.saveThirdPartyRoomId(matrixRoomId, thirdPartyRoomId);
+    return matrixRoomId;
   }
 
   /**
@@ -624,41 +600,38 @@ class Base {
    *
    * @returns {Promise} A Promise resolving to the user's client object
    */
-  getUserClient(roomId, senderId, senderName, avatarUrl, doNotTryToGetRemoteUserStoreData) {
+  async getUserClient(roomId, senderId, senderName, avatarUrl, doNotTryToGetRemoteUserStoreData) {
     const { info } = debug(this.getUserClient.name);
     info("get user client for third party user %s (%s)", senderId, senderName);
 
     if (senderId === undefined) {
-      return Promise.resolve(this.puppet.getClient());
-    } else {
-      if (!senderName && !this.allowNullSenderName) {
-        if (doNotTryToGetRemoteUserStoreData)
-          throw new Error('preventing an endless loop');
-
-        info("no senderName provided with payload, will check store");
-        return this.getOrInitRemoteUserStoreDataFromThirdPartyUserId(senderId).then((remoteUser)=>{
-          info("got remote user from store, with a possible client API call in there somewhere", remoteUser);
-          info("will retry now");
-          const senderName = remoteUser.get('senderName');
-          return this.getUserClient(roomId, senderId, senderName, avatarUrl, true);
-        });
-      }
-
-      info("this message was not sent by me");
-      return this.getIntentFromThirdPartySenderId(senderId, senderName, avatarUrl)
-        .then((ghostIntent) => {
-          return this.getStatusRoomId()
-            .then(statusRoomId => ghostIntent.join(statusRoomId))
-            .then(() => ghostIntent.join(roomId))
-            .then(() => ghostIntent.getClient());
-        });
+      return this.puppet.getClient();
     }
+
+    if (!senderName && !this.allowNullSenderName) {
+      if (doNotTryToGetRemoteUserStoreData)
+        throw new Error('preventing an endless loop');
+
+      info("no senderName provided with payload, will check store");
+      const remoteUser = await this.getOrInitRemoteUserStoreDataFromThirdPartyUserId(senderId);
+      info("got remote user from store, with a possible client API call in there somewhere", remoteUser);
+      info("will retry now");
+      const senderName = remoteUser.get('senderName');
+      return await this.getUserClient(roomId, senderId, senderName, avatarUrl, true);
+    }
+
+    info("this message was not sent by me");
+    const ghostIntent = await this.getIntentFromThirdPartySenderId(senderId, senderName, avatarUrl);
+    const statusRoomId = await this.getStatusRoomId();
+    await ghostIntent.join(statusRoomId);
+    await ghostIntent.join(roomId);
+    return await ghostIntent.getClient();
   }
 
   /**
    * Returns a promise
    */
-  handleThirdPartyRoomImageMessage(thirdPartyRoomImageMessageData) {
+  async handleThirdPartyRoomImageMessage(thirdPartyRoomImageMessageData) {
     const { info, warn } = debug(this.handleThirdPartyRoomImageMessage.name);
     info('handling third party room image message', thirdPartyRoomImageMessageData);
     let {
@@ -673,81 +646,80 @@ class Base {
       mimetype
     } = thirdPartyRoomImageMessageData;
 
-    return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((matrixRoomId) => {
-      return this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl).then((client) => {
-        if (senderId === undefined) {
-          info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
-          info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
-          info("if it came from a matrix client, then it's already in the client, sending again would dupe");
-          info("we use a tag on the end of messages to determine if it came from matrix");
+    const matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId);
+    const client = await this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl);
+    if (senderId === undefined) {
+      info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
+      info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
+      info("if it came from a matrix client, then it's already in the client, sending again would dupe");
+      info("we use a tag on the end of messages to determine if it came from matrix");
 
-          if (typeof text === 'undefined') {
-            info("we can't know if this message is from matrix or not, so just ignore it");
-            return;
-          }
-          else if (this.isTaggedMatrixMessage(text) || isFilenameTagged(path || url || '')) {
-            info('it is from matrix, so just ignore it.');
-            return;
-          } else {
-            info('it is from 3rd party client');
-          }
-        }
+      if (typeof text === 'undefined') {
+        info("we can't know if this message is from matrix or not, so just ignore it");
+        return;
+      }
+      if (this.isTaggedMatrixMessage(text) || isFilenameTagged(path || url || '')) {
+        info('it is from matrix, so just ignore it.');
+        return;
+      }
+      info('it is from 3rd party client');
+    }
 
-        let upload = (buffer, opts)=>{
-          return client.uploadContent(buffer, Object.assign({
-            name: text,
-            type: mimetype,
-            rawResponse: false
-          }, opts || {})).then((res)=>{
-            return {
-              content_uri: res.content_uri || res,
-              size: buffer.length
-            };
-          });
-        };
+    let upload = async(buffer, opts) => {
+      const res = await client.uploadContent(buffer, Object.assign({
+        name: text,
+        type: mimetype,
+        rawResponse: false
+      }, opts || {}));
+      return {
+        content_uri: res.content_uri || res,
+        size: buffer.length
+      };
+    };
 
-        let promise;
-        if ( url ) {
-          promise = ()=> {
-            return download.getBufferAndType(url).then(({buffer,type}) => {
-              return upload(buffer, { type: mimetype || type });
-            });
-          };
-        } else if ( path ) {
-          promise = () => {
-            return Promise.promisify(fs.readFile)(path).then(buffer => {
-              return upload(buffer);
-            });
-          };
-        } else if ( buffer ) {
-          promise = () => upload(buffer);
-        } else {
-          promise = Promise.reject(new Error('missing url or path'));
-        }
+    const tag = autoTagger(senderId, this);
 
-        const tag = autoTagger(senderId, this);
+    let res;
+    try {
+      if ( url ) {
+        const {buffer, type} = await download.getBufferAndType(url);
+        res = await upload(buffer, { type: mimetype || type });
+      } else if ( path ) {
+        const buffer = await (Promise.promisify(fs.readFile)(path));
+        res = await upload(buffer);
+      } else if ( buffer ) {
+        res = await upload(buffer);
+      } else {
+        throw new Error('missing url or path');
+      }
+    } catch(err) {
+      warn('upload error', err);
 
-        promise().then(({ content_uri, size }) => {
-          info('uploaded to', content_uri);
-          let msg = tag(text);
-          let opts = { mimetype, h, w, size };
-          return client.sendImageMessage(matrixRoomId, content_uri, opts, msg);
-        }, (err) =>{
-          warn('upload error', err);
+      let opts = {
+        body: tag(url || path || text),
+        msgtype: "m.text"
+      };
+      return await client.sendMessage(matrixRoomId, opts);
+    }
 
-          let opts = {
-            body: tag(url || path || text),
-            msgtype: "m.text"
-          };
-          return client.sendMessage(matrixRoomId, opts);
-        });
-      });
-    });
+    const { content_uri, size } = res;
+    info('uploaded to', content_uri);
+    let msg = tag(text);
+    let opts = { mimetype, h, w, size };
+    return await client.sendImageMessage(matrixRoomId, content_uri, opts, msg);
   }
+
   /**
    * Returns a promise
    */
-  handleThirdPartyRoomMessage(thirdPartyRoomMessageData) {
+  async handleThirdPartyRoomMessage(thirdPartyRoomMessageData) {
+    try {
+      return await this._handleThirdPartyRoomMessage(thirdPartyRoomMessageData);
+    } catch(err) {
+      return await this.sendStatusMsg({}, 'Error in '+this.handleThirdPartyRoomMessage.name, err, thirdPartyRoomMessageData);
+    }
+  }
+  async _handleThirdPartyRoomMessage(thirdPartyRoomMessageData) {
     const { info } = debug(this.handleThirdPartyRoomMessage.name);
     info('handling third party room message', thirdPartyRoomMessageData);
     const {
@@ -759,40 +731,34 @@ class Base {
       html
     } = thirdPartyRoomMessageData;
 
-    return this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId).then((matrixRoomId) => {
-      return this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl).then((client) => {
-        if (senderId === undefined) {
-          info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
-          info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
-          info("if it came from a matrix client, then it's already in the client, sending again would dupe");
-          info("we use a tag on the end of messages to determine if it came from matrix");
+    const matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId);
+    const client = await this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl);
+    if (senderId === undefined) {
+      info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
+      info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
+      info("if it came from a matrix client, then it's already in the client, sending again would dupe");
+      info("we use a tag on the end of messages to determine if it came from matrix");
 
-          if (this.isTaggedMatrixMessage(text)) {
-            info('it is from matrix, so just ignore it.');
-            return;
-          } else {
-            info('it is from 3rd party client');
-          }
-        }
+      if (this.isTaggedMatrixMessage(text)) {
+        info('it is from matrix, so just ignore it.');
+        return;
+      }
+      info('it is from 3rd party client');
+    }
 
-        let tag = autoTagger(senderId, this);
+    let tag = autoTagger(senderId, this);
 
-        if (html) {
-          return client.sendMessage(matrixRoomId, {
-            body: tag(text),
-            formatted_body: html,
-            format: "org.matrix.custom.html",
-            msgtype: "m.text"
-          });
-        } else {
-          return client.sendMessage(matrixRoomId, {
-            body: tag(text),
-            msgtype: "m.text"
-          });
-        }
+    if (html) {
+      return await client.sendMessage(matrixRoomId, {
+        body: tag(text),
+        formatted_body: html,
+        format: "org.matrix.custom.html",
+        msgtype: "m.text"
       });
-    }).catch(err=>{
-      this.sendStatusMsg({}, 'Error in '+this.handleThirdPartyRoomMessage.name, err, thirdPartyRoomMessageData);
+    }
+    return await client.sendMessage(matrixRoomId, {
+      body: tag(text),
+      msgtype: "m.text"
     });
   }
 
@@ -806,11 +772,18 @@ class Base {
       return warn('ignored a matrix event', data.type);
     }
   }
-  handleMatrixMessageEvent(data) {
+
+  async handleMatrixMessageEvent(data) {
+    try {
+      return await this._handleMatrixMessageEvent(data);
+    } catch (err) {
+      return await this.sendStatusMsg({}, 'Error in '+this.handleMatrixEvent.name, err, data);
+    }
+  }
+
+  async _handleMatrixMessageEvent(data) {
     const logger = debug(this.handleMatrixMessageEvent.name);
     const { room_id, content: { body, msgtype } } = data;
-
-    let promise, msg;
 
     if (this.isTaggedMatrixMessage(body)) {
       logger.info("ignoring tagged message, it was sent by the bridge");
@@ -821,55 +794,53 @@ class Base {
     const isStatusRoom = thirdPartyRoomId === this.getStatusRoomPostfix();
 
     if (!thirdPartyRoomId) {
-      promise = () => Promise.reject(new Error('could not determine third party room id!'));
-    } else if (isStatusRoom) {
+      throw new Error('could not determine third party room id!');
+    }
+    if (isStatusRoom) {
       logger.info("ignoring incoming message to status room");
 
-      msg = this.tagMatrixMessage("Commands are currently ignored here");
+      const msg = this.tagMatrixMessage("Commands are currently ignored here");
 
       // We may wish to process bang commands here at some point,
       // but for now let's just send a message back
-      promise = () => this.sendStatusMsg({ fixedWidthOutput: false }, msg);
+      return await this.sendStatusMsg({ fixedWidthOutput: false }, msg);
+    }
+    const msg = this.tagMatrixMessage(body);
 
-    } else {
-      msg = this.tagMatrixMessage(body);
-
-      if (msgtype === 'm.text' || msgtype === 'm.notice') {
-        if (this.handleMatrixUserBangCommand) {
-          const bc = bangCommand(body);
-          if (bc) return this.handleMatrixUserBangCommand(bc, data);
-        }
-        promise = () => this.sendMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, data);
-      } else if (msgtype === 'm.image') {
-        logger.info("picture message from riot");
-
-        let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
-        promise = () => this.sendImageMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
-          url, text: msg,
-          mimetype: data.content.info.mimetype,
-          width: data.content.info.w,
-          height: data.content.info.h,
-          size: data.content.info.size,
-        }, data);
-      } else if (msgtype === 'm.file') {
-        logger.info("file upload from riot");
-
-        let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
-        promise = () => this.sendFileMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
-          url, text: msg,
-          mimetype: data.content.info.mimetype,
-          size: data.content.info.size,
-          filename: data.content.filename || body || '',
-        }, data);
-      } else {
-        promise = () => Promise.reject(new Error('dont know how to handle this msgtype', msgtype));
+    if (msgtype === 'm.text' || msgtype === 'm.notice') {
+      if (this.handleMatrixUserBangCommand) {
+        const bc = bangCommand(body);
+        if (bc) return this.handleMatrixUserBangCommand(bc, data);
       }
+      return await this.sendMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, msg, data);
+    }
+    if (msgtype === 'm.image') {
+      logger.info("picture message from riot");
+
+      let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
+      return await this.sendImageMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
+        url, text: msg,
+        mimetype: data.content.info.mimetype,
+        width: data.content.info.w,
+        height: data.content.info.h,
+        size: data.content.info.size,
+      }, data);
+    }
+    if (msgtype === 'm.file') {
+      logger.info("file upload from riot");
+
+      let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
+      return await this.sendFileMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
+        url, text: msg,
+        mimetype: data.content.info.mimetype,
+        size: data.content.info.size,
+        filename: data.content.filename || body || '',
+      }, data);
     }
 
-    return promise().catch(err=>{
-      this.sendStatusMsg({}, 'Error in '+this.handleMatrixEvent.name, err, data);
-    });
+    throw new Error('dont know how to handle this msgtype', msgtype);
   }
+
   defaultDeduplicationTag() {
     return " \ufeff";
   }
@@ -895,30 +866,25 @@ class Base {
    * @param {string} avatarUrl a resource on the public web
    * @returns {Promise}
    */
-  setGhostAvatar(ghostIntent, avatarUrl) {
+  async setGhostAvatar(ghostIntent, avatarUrl) {
     const { info }  = debug(this.setGhostAvatar.name);
     const client = ghostIntent.getClient();
 
-    return ghostIntent.getProfileInfo(client.credentials.userId, 'avatar_url').then(({avatar_url})=>{
-      if (avatar_url) {
-        info('refusing to overwrite existing avatar');
-        return null;
-      } else {
-        info('downloading avatar from public web', avatarUrl);
-        return download.getBufferAndType(avatarUrl).then(({buffer, type})=> {
-          let opts = {
-            name: path.basename(avatarUrl),
-            type,
-            rawResponse: false
-          };
-          return client.uploadContent(buffer, opts);
-        }).then((res)=>{
-          const contentUri = res.content_uri;
-          info('uploaded avatar and got back content uri', contentUri);
-          return ghostIntent.setAvatarUrl(contentUri);
-        });
-      }
+    const { avatar_url } = await ghostIntent.getProfileInfo(client.credentials.userId, 'avatar_url');
+    if (avatar_url) {
+      info('refusing to overwrite existing avatar');
+      return null;
+    }
+    info('downloading avatar from public web', avatarUrl);
+    const {buffer, type} = await download.getBufferAndType(avatarUrl);
+    const res = await client.uploadContent(buffer, {
+      name: path.basename(avatarUrl),
+      type,
+      rawResponse: false
     });
+    const contentUri = res.content_uri;
+    info('uploaded avatar and got back content uri', contentUri);
+    return ghostIntent.setAvatarUrl(contentUri);
   }
 }
 
