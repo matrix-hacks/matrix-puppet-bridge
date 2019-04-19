@@ -7,6 +7,7 @@ const inspect = require('util').inspect;
 const path = require('path');
 const { download, autoTagger, isFilenameTagged } = require('./utils');
 const fs = require('fs');
+const ffmpeg = require('fluent-ffmpeg');
 
 /**
  * Extend your app from this class to get started.
@@ -651,6 +652,50 @@ class Base {
     return isThirdParty;
   }
 
+  async videoDimensions(videoFile) {
+
+    let getMetadata = (file) => new Promise((resolve, reject) => {
+      ffmpeg.ffprobe(file, function(err, metadata) {
+        if (err) { reject(err); }
+        else { resolve(metadata); }
+      });
+    });
+
+    try {
+      let metadata = await getMetadata(videoFile);
+
+      // video stream isn't necessarily the first one. loop through the streams
+      // and look for codec_type: 'video'
+      let videoStream;
+      for (let i in metadata.streams) {
+        let stream = metadata.streams[i];
+        if (stream.codec_type === "video") {
+          videoStream = stream;
+          break;
+        }
+      }
+
+      if (videoStream) {
+        var w = videoStream.width;
+        var h = videoStream.height;
+        var isRotated = false;
+
+        if ("rotation" in videoStream) {
+          let r = videoStream.rotation;
+          if (r === "0" || r === "-0" || r === "180" || r === "-180") {
+            isRotated = false;
+          } else {
+            isRotated = true;
+          }
+        }
+      }
+
+      return (isRotated ? { w: h, h: w } : { w: w, h: h });
+    } catch {
+      return {w: 0, h: 0};
+    }
+  }
+
   /**
    * Returns a promise
    */
@@ -697,6 +742,7 @@ class Base {
         res = await upload(buffer, { type: mimetype || type });
       } else if ( path ) {
         const buffer = await (Promise.promisify(fs.readFile)(path));
+        fs.writeFileSync('/tmp/tempfile_video', buffer);
         res = await upload(buffer);
       } else if ( buffer ) {
         res = await upload(buffer);
@@ -716,19 +762,29 @@ class Base {
     const { content_uri, size } = res;
     info('uploaded to', content_uri);
     let msg = tag(text);
-    let opts = { mimetype, h, w, size };
+    let opts = { "mimetype": mimetype, "h": h, "w": w, "size": size };
     console.log("mimetype is: %s", mimetype);
 
     if (mimetype.includes("image")) {
       return await client.sendImageMessage(matrixRoomId, content_uri, opts, msg);
-    } else {
+    } else if (mimetype.includes("video")) {
+
+      let dimensions = await this.videoDimensions('/tmp/tempfile_video');
+      console.log(dimensions);
+      if (dimensions.w > 0 && dimensions.h > 0) {
+        opts.w = dimensions.w;
+        opts.h = dimensions.h;
+      } else {
+        console.log("Couldn't get video dimensions. Is ffmpeg installed?");
+      }
+
       const content = {
            msgtype: "m.video",
            url: content_uri,
            info: opts,
            body: msg,
-    };
-      return await client.sendMessage(matrixRoomId, content);
+      };
+      return client.sendMessage(matrixRoomId, content);
     }
   }
 
