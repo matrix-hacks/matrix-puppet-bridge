@@ -678,15 +678,13 @@ class Base {
       if (videoStream) {
         var w = videoStream.width;
         var h = videoStream.height;
-        var isRotated = false;
 
         if ("rotation" in videoStream) {
           let r = videoStream.rotation;
-          if (r === "0" || r === "-0" || r === "180" || r === "-180") {
-            isRotated = false;
-          } else {
-            isRotated = true;
-          }
+
+          // Not actually sure what the possible rotation values are. Hopefully this covers it.
+          if (r === "0" || r === "-0" || r === "180" || r === "-180") { var isRotated = false; }
+          else { var isRotated = true; }
         }
       }
 
@@ -739,12 +737,14 @@ class Base {
     try {
       if ( url ) {
         const {buffer, type} = await download.getBufferAndType(url);
+        fs.writeFileSync('/tmp/tempfile_video', buffer);
         res = await upload(buffer, { type: mimetype || type });
       } else if ( path ) {
         const buffer = await (Promise.promisify(fs.readFile)(path));
         fs.writeFileSync('/tmp/tempfile_video', buffer);
         res = await upload(buffer);
       } else if ( buffer ) {
+        fs.writeFileSync('/tmp/tempfile_video', buffer);
         res = await upload(buffer);
       } else {
         throw new Error('missing url or path');
