@@ -711,6 +711,7 @@ class Base {
       avatarUrl,
       text,
       url, path, buffer, // either one is fine
+      mimetype, // Optional unless sending a buffer. We'll try to figure it out for a url or path.
     } = payload;
 
     const matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId);
@@ -720,7 +721,7 @@ class Base {
       return;
     }
 
-    const mimetype = mime.lookup(payload.path);
+    if (!mimetype) mimetype = mime.lookup(url || path);
 
     let upload = async(buffer, opts) => {
       const res = await client.uploadContent(buffer, Object.assign({
@@ -763,26 +764,30 @@ class Base {
     info('uploaded to', content_uri);
     let opts = { "mimetype": mimetype, "h": 0, "w": 0, "size": size };
     let messageType = "m.file";
+	
+    if (!mimetype) {
+      console.log("Couldn't get mimetype for attachment.");
+    } else {
+      if (mimetype && mimetype.includes("image")) {
+        messageType = "m.image";
 
-    if (mimetype.includes("image")) {
-      messageType = "m.image";
+        const dimensions = sizeOf(localFilePath);
+        opts.h = dimensions.height;
+        opts.w = dimensions.width;
 
-      const dimensions = sizeOf(localFilePath);
-      opts.h = dimensions.height;
-      opts.w = dimensions.width;
+      } else if (mimetype && mimetype.includes("video")) {
 
-    } else if (mimetype.includes("video")) {
+        const dimensions = await this.videoDimensions(localFilePath);
+        if (dimensions.w > 0 && dimensions.h > 0) {
+          opts.w = dimensions.w;
+          opts.h = dimensions.h;
 
-      const dimensions = await this.videoDimensions(localFilePath);
-      if (dimensions.w > 0 && dimensions.h > 0) {
-        opts.w = dimensions.w;
-        opts.h = dimensions.h;
-
-        // Messages get ugly if we send a video without setting dimensions, 
-        // so only send the message as m.video if we can get them. Otherwise just send it as m.file
-        messageType = "m.video";
-      } else {
-        warn("Couldn't get video dimensions. Is ffmpeg installed?");
+          // Messages get ugly if we send a video without setting dimensions, 
+          // so only send the message as m.video if we can get them. Otherwise just send it as m.file
+          messageType = "m.video";
+        } else {
+          warn("Couldn't get video dimensions. Is ffmpeg installed?");
+        }
       }
     }
 
