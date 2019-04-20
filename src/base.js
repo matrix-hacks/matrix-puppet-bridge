@@ -8,6 +8,8 @@ const path = require('path');
 const { download, autoTagger, isFilenameTagged } = require('./utils');
 const fs = require('fs');
 const ffmpeg = require('fluent-ffmpeg');
+const sizeOf = require('image-size');
+const mime = require('mime-types');
 
 /**
  * Extend your app from this class to get started.
@@ -694,12 +696,14 @@ class Base {
     }
   }
 
-  /**
-   * Returns a promise
-   */
+  // This is deprecated. Use handleThirdPartyRoomMessageWithAttachment instead
   async handleThirdPartyRoomImageMessage(thirdPartyRoomImageMessageData) {
-    const { info, warn } = debug(this.handleThirdPartyRoomImageMessage.name);
-    info('handling third party room image message', thirdPartyRoomImageMessageData);
+    return this.handleThirdPartyRoomMessageWithAttachment(thirdPartyRoomImageMessageData);
+  }
+
+  async handleThirdPartyRoomMessageWithAttachment(payload) {
+    const { info, warn } = debug(this.handleThirdPartyRoomMessageWithAttachment.name);
+    info('handling third party room message with attachment', payload);
     let {
       roomId,
       senderName,
@@ -707,10 +711,7 @@ class Base {
       avatarUrl,
       text,
       url, path, buffer, // either one is fine
-      h,
-      w,
-      mimetype
-    } = thirdPartyRoomImageMessageData;
+    } = payload;
 
     const matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId);
     const client = await this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl);
@@ -718,6 +719,8 @@ class Base {
     if (!this.messageIsFromThirdParty(senderId, text, url || path)) {
       return;
     }
+
+    const mimetype = mime.lookup(payload.path);
 
     let upload = async(buffer, opts) => {
       const res = await client.uploadContent(buffer, Object.assign({
@@ -734,58 +737,62 @@ class Base {
     const tag = autoTagger(senderId, this);
 
     let res;
+    let localFilePath = '/tmp/matrix_bridge_tempfile';
     try {
       if ( url ) {
         const {buffer, type} = await download.getBufferAndType(url);
-        fs.writeFileSync('/tmp/tempfile_video', buffer);
+        fs.writeFileSync(localFilePath, buffer);
         res = await upload(buffer, { type: mimetype || type });
       } else if ( path ) {
         const buffer = await (Promise.promisify(fs.readFile)(path));
-        fs.writeFileSync('/tmp/tempfile_video', buffer);
+        localFilePath = path;
         res = await upload(buffer);
       } else if ( buffer ) {
-        fs.writeFileSync('/tmp/tempfile_video', buffer);
+        fs.writeFileSync(localFilePath, buffer);
         res = await upload(buffer);
       } else {
         throw new Error('missing url or path');
       }
     } catch(err) {
       warn('upload error', err);
-
-      let opts = {
-        body: tag(url || path || text),
-        msgtype: "m.text"
-      };
-      return await client.sendMessage(matrixRoomId, opts);
+      // If we can't upload the file just send a plain text message with the url or file path.
+      return await client.sendMessage(matrixRoomId, {body: tag(url || path || text), msgtype: "m.text"});
     }
 
     const { content_uri, size } = res;
     info('uploaded to', content_uri);
-    let msg = tag(text);
-    let opts = { "mimetype": mimetype, "h": h, "w": w, "size": size };
-    console.log("mimetype is: %s", mimetype);
+    let opts = { "mimetype": mimetype, "h": 0, "w": 0, "size": size };
+    let messageType = "m.file";
 
     if (mimetype.includes("image")) {
-      return await client.sendImageMessage(matrixRoomId, content_uri, opts, msg);
+      messageType = "m.image";
+
+      const dimensions = sizeOf(localFilePath);
+      opts.h = dimensions.height;
+      opts.w = dimensions.width;
+
     } else if (mimetype.includes("video")) {
 
-      let dimensions = await this.videoDimensions('/tmp/tempfile_video');
-      console.log(dimensions);
+      const dimensions = await this.videoDimensions(localFilePath);
       if (dimensions.w > 0 && dimensions.h > 0) {
         opts.w = dimensions.w;
         opts.h = dimensions.h;
-      } else {
-        console.log("Couldn't get video dimensions. Is ffmpeg installed?");
-      }
 
-      const content = {
-           msgtype: "m.video",
-           url: content_uri,
-           info: opts,
-           body: msg,
-      };
-      return client.sendMessage(matrixRoomId, content);
+        // Messages get ugly if we send a video without setting dimensions, 
+        // so only send the message as m.video if we can get them. Otherwise just send it as m.file
+        messageType = "m.video";
+      } else {
+        warn("Couldn't get video dimensions. Is ffmpeg installed?");
+      }
     }
+
+    const content = {
+         msgtype: messageType,
+         url: content_uri,
+         info: opts,
+         body: tag(text),
+    };
+    return client.sendMessage(matrixRoomId, content);
   }
 
   /**
