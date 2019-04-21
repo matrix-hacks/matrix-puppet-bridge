@@ -696,11 +696,10 @@ class Base {
     }
   }
 
-  // This is deprecated. Use handleThirdPartyRoomMessageWithAttachment instead
-  async handleThirdPartyRoomImageMessage(thirdPartyRoomImageMessageData) {
-    return this.handleThirdPartyRoomMessageWithAttachment(thirdPartyRoomImageMessageData);
-  }
-
+  // Payload can include a url, path, or buffer. Mimetype is optional 
+  // (we'll attempt to figure it out unless it's set explicitly), but it's best to set it 
+  // when sending a buffer if possible. If the mimetype isn't set and we can't figure it out
+  // the attachement will be sent as an m.file message.
   async handleThirdPartyRoomMessageWithAttachment(payload) {
     const { info, warn } = debug(this.handleThirdPartyRoomMessageWithAttachment.name);
     info('handling third party room message with attachment', payload);
@@ -710,8 +709,8 @@ class Base {
       senderId,
       avatarUrl,
       text,
-      url, path, buffer, // either one is fine
-      mimetype, // Optional unless sending a buffer. We'll try to figure it out for a url or path.
+      url, path, buffer,
+      mimetype,
     } = payload;
 
     const matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId);
@@ -764,7 +763,7 @@ class Base {
     info('uploaded to', content_uri);
     let opts = { "mimetype": mimetype, "h": 0, "w": 0, "size": size };
     let messageType = "m.file";
-	
+
     if (!mimetype) {
       console.log("Couldn't get mimetype for attachment.");
     } else {
@@ -798,6 +797,85 @@ class Base {
          body: tag(text),
     };
     return client.sendMessage(matrixRoomId, content);
+  }
+
+  // This is deprecated. Use handleThirdPartyRoomMessageWithAttachment instead
+  async handleThirdPartyRoomImageMessage(thirdPartyRoomImageMessageData) {
+    const { info, warn } = debug(this.handleThirdPartyRoomImageMessage.name);
+    info('handling third party room image message', thirdPartyRoomImageMessageData);
+    let {
+      roomId,
+      senderName,
+      senderId,
+      avatarUrl,
+      text,
+      url, path, buffer, // either one is fine
+      h,
+      w,
+      mimetype
+    } = thirdPartyRoomImageMessageData;
+
+    const matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId);
+    const client = await this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl);
+    if (senderId === undefined) {
+      info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
+      info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
+      info("if it came from a matrix client, then it's already in the client, sending again would dupe");
+      info("we use a tag on the end of messages to determine if it came from matrix");
+
+      if (typeof text === 'undefined') {
+        info("we can't know if this message is from matrix or not, so just ignore it");
+        return;
+      }
+      if (this.isTaggedMatrixMessage(text) || isFilenameTagged(path || url || '')) {
+        info('it is from matrix, so just ignore it.');
+        return;
+      }
+      info('it is from 3rd party client');
+    }
+
+    let upload = async(buffer, opts) => {
+      const res = await client.uploadContent(buffer, Object.assign({
+        name: text,
+        type: mimetype,
+        rawResponse: false
+      }, opts || {}));
+      return {
+        content_uri: res.content_uri || res,
+        size: buffer.length
+      };
+    };
+
+    const tag = autoTagger(senderId, this);
+
+    let res;
+    try {
+      if ( url ) {
+        const {buffer, type} = await download.getBufferAndType(url);
+        res = await upload(buffer, { type: mimetype || type });
+      } else if ( path ) {
+        const buffer = await (Promise.promisify(fs.readFile)(path));
+        res = await upload(buffer);
+      } else if ( buffer ) {
+        res = await upload(buffer);
+      } else {
+        throw new Error('missing url or path');
+      }
+    } catch(err) {
+      warn('upload error', err);
+
+      let opts = {
+        body: tag(url || path || text),
+        msgtype: "m.text"
+      };
+      return await client.sendMessage(matrixRoomId, opts);
+    }
+
+    const { content_uri, size } = res;
+    info('uploaded to', content_uri);
+    let msg = tag(text);
+    let opts = { mimetype, h, w, size };
+    return await client.sendImageMessage(matrixRoomId, content_uri, opts, msg);
   }
 
   /**
