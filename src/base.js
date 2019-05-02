@@ -789,6 +789,9 @@ class Base {
         }
       }
     }
+    // don't send a message without a body. It's not allowed: https://matrix.org/docs/spec/client_server/r0.4.0.html#id89
+    if (!text) { text = mimetype }
+
 
     const content = {
          msgtype: messageType,
