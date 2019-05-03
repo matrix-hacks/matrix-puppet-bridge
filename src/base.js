@@ -767,15 +767,14 @@ class Base {
     if (!mimetype) {
       console.log("Couldn't get mimetype for attachment.");
     } else {
-      if (mimetype && mimetype.includes("image")) {
+      if (mimetype.includes("image")) {
         messageType = "m.image";
 
         const dimensions = sizeOf(localFilePath);
         opts.h = dimensions.height;
         opts.w = dimensions.width;
 
-      } else if (mimetype && mimetype.includes("video")) {
-
+      } else if (mimetype.includes("video")) {
         const dimensions = await this.videoDimensions(localFilePath);
         if (dimensions.w > 0 && dimensions.h > 0) {
           opts.w = dimensions.w;
@@ -787,11 +786,13 @@ class Base {
         } else {
           warn("Couldn't get video dimensions. Is ffmpeg installed?");
         }
+      } else if (mimetype.includes("audio")) {
+        messageType = "m.audio";
       }
     }
+
     // don't send a message without a body. It's not allowed: https://matrix.org/docs/spec/client_server/r0.4.0.html#id89
     if (!text) { text = mimetype }
-
 
     const content = {
          msgtype: messageType,
