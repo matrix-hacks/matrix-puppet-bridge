@@ -737,7 +737,8 @@ class Base {
     const tag = autoTagger(senderId, this);
 
     let res;
-    let localFilePath = '/tmp/matrix_bridge_tempfile';
+    let randomString = Math.random().toString(36).slice(2, 12);
+    let localFilePath = '/tmp/matrix_bridge_tempfile_' + randomString;
     try {
       if ( url ) {
         const {buffer, type} = await download.getBufferAndType(url);
