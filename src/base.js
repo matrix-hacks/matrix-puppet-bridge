@@ -5,7 +5,7 @@ const bangCommand = require('./bang-command');
 const urlParse = require('url').parse;
 const inspect = require('util').inspect;
 const path = require('path');
-const { download, autoTagger, isFilenameTagged } = require('./utils');
+const { download, autoTagger, isFilenameTagged, sleep } = require('./utils');
 const fs = require('fs');
 
 /**
@@ -713,11 +713,17 @@ class Base {
    * Returns a promise
    */
   async handleThirdPartyRoomMessage(thirdPartyRoomMessageData) {
-    try {
-      return await this._handleThirdPartyRoomMessage(thirdPartyRoomMessageData);
-    } catch(err) {
-      return await this.sendStatusMsg({}, 'Error in '+this.handleThirdPartyRoomMessage.name, err, thirdPartyRoomMessageData);
+    let retry = 5;
+    let lastError;
+    while (retry--) {
+      try {
+        return await this._handleThirdPartyRoomMessage(thirdPartyRoomMessageData);
+      } catch(err) {
+        lastError = err;
+      }
+      await sleep(100);
     }
+    return await this.sendStatusMsg({}, 'Error in '+this.handleThirdPartyRoomMessage.name, lastError, thirdPartyRoomMessageData);
   }
   async _handleThirdPartyRoomMessage(thirdPartyRoomMessageData) {
     const { info } = debug(this.handleThirdPartyRoomMessage.name);
