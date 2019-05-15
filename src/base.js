@@ -585,6 +585,21 @@ class Base {
         warn("Both puppet and bot client invite only settings failed :( Error:", err.message);
       }
     }
+
+    info("restore alias when binding was broken", matrixRoomId);
+    try {
+      const room = puppetClient.getRoom(matrixRoomId);
+      const aliases = room.getAliases();
+
+      if (!aliases.includes(roomAlias)) {
+        await botIntent.sendStateEvent(matrixRoomId, "m.room.aliases", this.domain, {
+          aliases: aliases.concat(roomAlias),
+        });
+      }
+    } catch(err) {
+      warn("room alias restoring was failed Error:", err.message);
+    }
+
     this.puppet.saveThirdPartyRoomId(matrixRoomId, thirdPartyRoomId);
     return matrixRoomId;
   }
