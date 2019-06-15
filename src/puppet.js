@@ -104,7 +104,7 @@ class Puppet {
    * @returns {Promise}
    */
   async associate() {
-    const config = readConfigFile(this.jsonFile);
+    const config = await readConfigFile(this.jsonFile);
     console.log([
       'This bridge performs matrix user puppeting.',
       'This means that the bridge logs in as your user and acts on your behalf',
