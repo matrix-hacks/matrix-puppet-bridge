@@ -7,6 +7,9 @@ const inspect = require('util').inspect;
 const path = require('path');
 const { download, autoTagger, isFilenameTagged } = require('./utils');
 const fs = require('fs');
+const ffmpeg = require('fluent-ffmpeg');
+const sizeOf = require('image-size');
+const mime = require('mime-types');
 
 /**
  * Extend your app from this class to get started.
@@ -628,9 +631,180 @@ class Base {
     return await ghostIntent.getClient();
   }
 
-  /**
-   * Returns a promise
-   */
+  messageIsFromThirdParty(senderId, messageText, attachedFilePath = '') {
+    const { info, warn } = debug(this.handleThirdPartyRoomImageMessage.name);
+
+    let isThirdParty = true;
+    if (senderId === undefined) {
+      info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
+      info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
+      info("if it came from a matrix client, then it's already in the client, sending again would dupe");
+      info("we use a tag on the end of messages to determine if it came from matrix");
+
+      if (typeof messageText === 'undefined') {
+        info("we can't know if this message is from matrix or not, so just ignore it");
+        isThirdParty = false;
+      }
+      if (this.isTaggedMatrixMessage(messageText) || isFilenameTagged(attachedFilePath || '')) {
+        info('it is from matrix, so just ignore it.');
+        isThirdParty = false;
+      }
+      info('it is from 3rd party client');
+    }
+    return isThirdParty;
+  }
+
+  async videoDimensions(videoFile) {
+
+    let getMetadata = (file) => new Promise((resolve, reject) => {
+      ffmpeg.ffprobe(file, function(err, metadata) {
+        if (err) { reject(err); }
+        else { resolve(metadata); }
+      });
+    });
+
+    try {
+      let metadata = await getMetadata(videoFile);
+
+      // video stream isn't necessarily the first one. loop through the streams
+      // and look for codec_type: 'video'
+      let videoStream;
+      for (let i in metadata.streams) {
+        let stream = metadata.streams[i];
+        if (stream.codec_type === "video") {
+          videoStream = stream;
+          break;
+        }
+      }
+
+      if (videoStream) {
+        var w = videoStream.width;
+        var h = videoStream.height;
+
+        if ("rotation" in videoStream) {
+          let r = videoStream.rotation;
+
+          // Not actually sure what the possible rotation values are. Hopefully this covers it.
+          if (r === "0" || r === "-0" || r === "180" || r === "-180") { var isRotated = false; }
+          else { var isRotated = true; }
+        }
+      }
+
+      return (isRotated ? { w: h, h: w } : { w: w, h: h });
+    } catch {
+      return {w: 0, h: 0};
+    }
+  }
+
+  // Payload can include a url, path, or buffer. Mimetype is optional 
+  // (we'll attempt to figure it out unless it's set explicitly), but it's best to set it 
+  // when sending a buffer if possible. If the mimetype isn't set and we can't figure it out
+  // the attachement will be sent as an m.file message.
+  async handleThirdPartyRoomMessageWithAttachment(payload) {
+    const { info, warn } = debug(this.handleThirdPartyRoomMessageWithAttachment.name);
+    info('handling third party room message with attachment', payload);
+    let {
+      roomId,
+      senderName,
+      senderId,
+      avatarUrl,
+      text,
+      url, path, buffer,
+      mimetype,
+    } = payload;
+
+    const matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId);
+    const client = await this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl);
+
+    if (!this.messageIsFromThirdParty(senderId, text, url || path)) {
+      return;
+    }
+
+    if (!mimetype) mimetype = mime.lookup(url || path);
+
+    let upload = async(buffer, opts) => {
+      const res = await client.uploadContent(buffer, Object.assign({
+        name: text,
+        type: mimetype,
+        rawResponse: false
+      }, opts || {}));
+      return {
+        content_uri: res.content_uri || res,
+        size: buffer.length
+      };
+    };
+
+    const tag = autoTagger(senderId, this);
+
+    let res;
+    let randomString = Math.random().toString(36).slice(2, 12);
+    let localFilePath = '/tmp/matrix_bridge_tempfile_' + randomString;
+    try {
+      if ( url ) {
+        const {buffer, type} = await download.getBufferAndType(url);
+        fs.writeFileSync(localFilePath, buffer);
+        res = await upload(buffer, { type: mimetype || type });
+      } else if ( path ) {
+        const buffer = await (Promise.promisify(fs.readFile)(path));
+        localFilePath = path;
+        res = await upload(buffer);
+      } else if ( buffer ) {
+        fs.writeFileSync(localFilePath, buffer);
+        res = await upload(buffer);
+      } else {
+        throw new Error('missing url or path');
+      }
+    } catch(err) {
+      warn('upload error', err);
+      // If we can't upload the file just send a plain text message with the url or file path.
+      return await client.sendMessage(matrixRoomId, {body: tag(url || path || text), msgtype: "m.text"});
+    }
+
+    const { content_uri, size } = res;
+    info('uploaded to', content_uri);
+    let opts = { "mimetype": mimetype, "h": 0, "w": 0, "size": size };
+    let messageType = "m.file";
+
+    if (!mimetype) {
+      console.log("Couldn't get mimetype for attachment.");
+    } else {
+      if (mimetype.includes("image")) {
+        messageType = "m.image";
+
+        const dimensions = sizeOf(localFilePath);
+        opts.h = dimensions.height;
+        opts.w = dimensions.width;
+
+      } else if (mimetype.includes("video")) {
+        const dimensions = await this.videoDimensions(localFilePath);
+        if (dimensions.w > 0 && dimensions.h > 0) {
+          opts.w = dimensions.w;
+          opts.h = dimensions.h;
+
+          // Messages get ugly if we send a video without setting dimensions, 
+          // so only send the message as m.video if we can get them. Otherwise just send it as m.file
+          messageType = "m.video";
+        } else {
+          warn("Couldn't get video dimensions. Is ffmpeg installed?");
+        }
+      } else if (mimetype.includes("audio")) {
+        messageType = "m.audio";
+      }
+    }
+
+    // don't send a message without a body. It's not allowed: https://matrix.org/docs/spec/client_server/r0.4.0.html#id89
+    if (!text) { text = mimetype }
+
+    const content = {
+         msgtype: messageType,
+         url: content_uri,
+         info: opts,
+         body: tag(text),
+    };
+    return client.sendMessage(matrixRoomId, content);
+  }
+
+  // This is deprecated. Use handleThirdPartyRoomMessageWithAttachment instead
   async handleThirdPartyRoomImageMessage(thirdPartyRoomImageMessageData) {
     const { info, warn } = debug(this.handleThirdPartyRoomImageMessage.name);
     info('handling third party room image message', thirdPartyRoomImageMessageData);
@@ -733,17 +907,9 @@ class Base {
 
     const matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId);
     const client = await this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl);
-    if (senderId === undefined) {
-      info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
-      info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
-      info("if it came from a matrix client, then it's already in the client, sending again would dupe");
-      info("we use a tag on the end of messages to determine if it came from matrix");
 
-      if (this.isTaggedMatrixMessage(text)) {
-        info('it is from matrix, so just ignore it.');
-        return;
-      }
-      info('it is from 3rd party client');
+    if (!this.messageIsFromThirdParty(senderId, text)) {
+      return;
     }
 
     let tag = autoTagger(senderId, this);
