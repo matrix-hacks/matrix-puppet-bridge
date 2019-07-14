@@ -1071,20 +1071,27 @@ class Base {
       };
     };
 
-    const { avatar_url } = await ghostIntent.getProfileInfo(client.credentials.userId, 'avatar_url');
-    if (avatar_url) {
-      info('refusing to overwrite existing avatar');
-      return null;
-    }
     info('fetching avatar from', avatar);
     let buffer, mimetype;
     if(typeof avatar == "string") {
       buffer = await download.getBufferAndType(avatar).buffer;
       mimetype = await download.getBufferAndType(avatar).type;
-	  } else {
-	    buffer = avatar.buffer;
-	    mimetype = avatar.type;
+    } else {
+      buffer = avatar.buffer;
+      mimetype = avatar.type;
     }
+
+    const { avatar_url } = await ghostIntent.getProfileInfo(client.credentials.userId, 'avatar_url');
+    if (avatar_url) {
+      info('check if avatars differ');
+      let url = this.homeserver.href + "_matrix/media/v1/download/" + avatar_url.slice(6);
+      let prev_buffer = await download.getBuffer(url);
+      if (Buffer.compare(buffer, prev_buffer) == 0) { //replace avatar only if they differ
+        info('refusing to overwrite existing avatar');
+        return null;
+      }
+    }
+
     let res = await upload(buffer, { type: mimetype });
     const contentUri = res.content_uri;
     info('uploaded avatar and got back content uri', contentUri);
