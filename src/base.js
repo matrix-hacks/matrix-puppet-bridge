@@ -182,6 +182,17 @@ class Base {
   }
 
   /**
+   * Implement how a typing event is sent over the third party network
+   *
+   * @param {string} _thirdPartyRoomId
+   * @param {boolean} _status
+   * @returns {Promise}
+   */
+  async sendTypingEventAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _status) {
+    throw new Error('please implement sendTypingEventAsPuppetToThirdPartyRoomWithId');
+  }
+
+  /**
    * Return a postfix for the status room name.
    * It should be fairly unique so that it's unlikely to clash with a legitmate user.
    * (Let's hope nobody likes the name 'puppetStatusRoom')
