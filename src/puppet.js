@@ -68,6 +68,19 @@ class Puppet {
       }
     });
 
+    this.client.on("RoomMember.typing", (event, member) => {
+      if (this.app === null) {
+        return;
+      }
+
+      if (member.roomId in this.thirdPartyRooms) {
+        if (member.userId === this.id) {
+          console.log("Receive a typing event from ourself");
+          return this.app.sendTypingEventAsPuppetToThirdPartyRoomWithId(this.thirdPartyRooms[member.roomId],member.typing);
+        }
+      }
+    });
+
     let isSynced = false;
     this.client.on('sync', (state) => {
       if ( state === 'PREPARED' ) {
