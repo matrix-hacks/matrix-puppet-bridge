@@ -363,7 +363,7 @@ class Base {
    * @param {Object[]} users The list of third party users
    * @param {string} users[].name The third party user name
    * @param {string} users[].userId The third party user ID
-   * @param {string} users[].avatarUrl The third party user avatar URL
+   * @param {string} users[].avatar The third party user avatar
    *
    * @returns {Promise} Promise resolving if all joins success
    */
@@ -373,7 +373,7 @@ class Base {
     info("Join %s users to the status room", users.length);
     const statusRoomId = await this.getStatusRoomId();
     await Promise.each(users, async(user) => {
-      const ghostIntent = await this.getIntentFromThirdPartySenderId(user.userId, user.name, user.avatarUrl);
+      const ghostIntent = await this.getIntentFromThirdPartySenderId(user.userId, user.name, user.avatar);
       return await ghostIntent.join(statusRoomId);
     });
     info("Contact list synced");
@@ -478,19 +478,19 @@ class Base {
    *
    * @param {string} userId The third party user ID
    * @param {string} name The third party user name
-   * @param {string} avatarUrl The third party user avatar URL
+   * @param {string} avatar The third party user avatar
    *
    * @returns {Promise} A promise resolving to an Intent
    */
-  async getIntentFromThirdPartySenderId(userId, name, avatarUrl) {
+  async getIntentFromThirdPartySenderId(userId, name, avatar) {
     const ghostIntent = this.bridge.getIntent(this.getGhostUserFromThirdPartySenderId(userId));
 
     let promiseList = [];
     if (name)
       promiseList.push(ghostIntent.setDisplayName(name));
 
-    if (avatarUrl)
-      promiseList.push(this.setGhostAvatar(ghostIntent, avatarUrl));
+    if (avatar)
+      promiseList.push(this.setGhostAvatar(ghostIntent, avatar));
 
     await Promise.all(promiseList);
     return ghostIntent;
@@ -613,12 +613,12 @@ class Base {
    * @param {string} roomId The room the user must join ID
    * @param {string} senderId The user's ID
    * @param {string} senderName The user's name
-   * @param {string} avatarUrl A resource on the public web
+   * @param {string} avatar A resource containing the avatar
    * @param {boolean} doNoTryToGetRemoteUsersStoreData Private parameter to prevent infinite loop
    *
    * @returns {Promise} A Promise resolving to the user's client object
    */
-  async getUserClient(roomId, senderId, senderName, avatarUrl, doNotTryToGetRemoteUserStoreData) {
+  async getUserClient(roomId, senderId, senderName, avatar, doNotTryToGetRemoteUserStoreData) {
     const { info } = debug(this.getUserClient.name);
     info("get user client for third party user %s (%s)", senderId, senderName);
 
@@ -635,11 +635,11 @@ class Base {
       info("got remote user from store, with a possible client API call in there somewhere", remoteUser);
       info("will retry now");
       const senderName = remoteUser.get('senderName');
-      return await this.getUserClient(roomId, senderId, senderName, avatarUrl, true);
+      return await this.getUserClient(roomId, senderId, senderName, avatar, true);
     }
 
     info("this message was not sent by me");
-    const ghostIntent = await this.getIntentFromThirdPartySenderId(senderId, senderName, avatarUrl);
+    const ghostIntent = await this.getIntentFromThirdPartySenderId(senderId, senderName, avatar);
     const statusRoomId = await this.getStatusRoomId();
     await ghostIntent.join(statusRoomId);
     await ghostIntent.join(roomId);
@@ -722,14 +722,14 @@ class Base {
       roomId,
       senderName,
       senderId,
-      avatarUrl,
+      avatar,
       text,
       url, path, buffer,
       mimetype,
     } = payload;
 
     const matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId);
-    const client = await this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl);
+    const client = await this.getUserClient(matrixRoomId, senderId, senderName, avatar);
 
     if (!this.messageIsFromThirdParty(senderId, text, url || path)) {
       return;
@@ -827,7 +827,7 @@ class Base {
       roomId,
       senderName,
       senderId,
-      avatarUrl,
+      avatar,
       text,
       url, path, buffer, // either one is fine
       h,
@@ -836,7 +836,7 @@ class Base {
     } = thirdPartyRoomImageMessageData;
 
     const matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId);
-    const client = await this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl);
+    const client = await this.getUserClient(matrixRoomId, senderId, senderName, avatar);
     if (senderId === undefined) {
       info("this message was sent by me, but did it come from a matrix client or a 3rd party client?");
       info("if it came from a 3rd party client, we want to repeat it as a 'notice' type message");
@@ -921,13 +921,13 @@ class Base {
       roomId,
       senderName,
       senderId,
-      avatarUrl,
+      avatar,
       text,
       html
     } = thirdPartyRoomMessageData;
 
     const matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(roomId);
-    const client = await this.getUserClient(matrixRoomId, senderId, senderName, avatarUrl);
+    const client = await this.getUserClient(matrixRoomId, senderId, senderName, avatar);
 
     if (!this.messageIsFromThirdParty(senderId, text)) {
       return;
@@ -1050,25 +1050,49 @@ class Base {
    * for the same exact image.
    *
    * @param {Intent} ghostIntent represents the ghost user
-   * @param {string} avatarUrl a resource on the public web
+   * @param {string} avatar a resource on the public web
    * @returns {Promise}
    */
-  async setGhostAvatar(ghostIntent, avatarUrl) {
+  async setGhostAvatar(ghostIntent, avatar) {
     const { info }  = debug(this.setGhostAvatar.name);
     const client = ghostIntent.getClient();
 
+    const text = "avatar_" + client.credentials.userId + Date.now();
+
+    let upload = async(buffer, opts) => {
+      const res = await client.uploadContent(buffer, Object.assign({
+        name: text,
+        type: mimetype,
+        rawResponse: false
+      }, opts || {}));
+      return {
+        content_uri: res.content_uri || res,
+        size: buffer.length
+      };
+    };
+
+    info('fetching avatar from', avatar);
+    let buffer, mimetype;
+    if(typeof avatar == "string") {
+      buffer = await download.getBufferAndType(avatar).buffer;
+      mimetype = await download.getBufferAndType(avatar).type;
+    } else {
+      buffer = avatar.buffer;
+      mimetype = avatar.type;
+    }
+
     const { avatar_url } = await ghostIntent.getProfileInfo(client.credentials.userId, 'avatar_url');
     if (avatar_url) {
-      info('refusing to overwrite existing avatar');
-      return null;
+      info('check if avatars differ');
+      let url = this.homeserver.href + "_matrix/media/v1/download/" + avatar_url.slice(6);
+      let prev_buffer = await download.getBuffer(url);
+      if (Buffer.compare(buffer, prev_buffer) == 0) { //replace avatar only if they differ
+        info('refusing to overwrite existing avatar');
+        return null;
+      }
     }
-    info('downloading avatar from public web', avatarUrl);
-    const {buffer, type} = await download.getBufferAndType(avatarUrl);
-    const res = await client.uploadContent(buffer, {
-      name: path.basename(avatarUrl),
-      type,
-      rawResponse: false
-    });
+
+    let res = await upload(buffer, { type: mimetype });
     const contentUri = res.content_uri;
     info('uploaded avatar and got back content uri', contentUri);
     return ghostIntent.setAvatarUrl(contentUri);
