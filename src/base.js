@@ -558,7 +558,7 @@ class Base {
       info("the room doesn't exist. we need to create it for the first time");
       const thirdPartyRoomData = await this.getThirdPartyRoomDataById(thirdPartyRoomId);
       info("got 3p room data", thirdPartyRoomData);
-      const { name, topic } = thirdPartyRoomData;
+      const { name, topic, avatar } = thirdPartyRoomData;
       info("creating room !!!!", ">>>>"+roomAliasName+"<<<<", name, topic);
       const { room_id } = await botIntent.createRoom({
         createAsClient: true, // bot won't auto-join the room in this case
@@ -567,6 +567,12 @@ class Base {
         }
       })
       info("room created", room_id, roomAliasName);
+
+      if(avatar) {
+        info("setting room avatar", room_id);
+        this.setRoomAvatar(room_id, avatar);
+      }
+
       matrixRoomId = room_id;
     }
 
@@ -1054,11 +1060,7 @@ class Base {
   /**
    * Sets the ghost avatar using a regular URL
    * Will check to see if an existing avatar exists, and if so,
-   * will not bother downloading from URL, uploading to media store,
-   * and setting in the ghost user profile. Why? I do not know if
-   * this is the same image or a different one, and without such
-   * information, we'd constantly be running this whole routine
-   * for the same exact image.
+   * will check if they are the same and only replace if they differ
    *
    * @param {Intent} ghostIntent represents the ghost user
    * @param {string} avatar a resource on the public web
@@ -1107,6 +1109,51 @@ class Base {
     const contentUri = res.content_uri;
     info('uploaded avatar and got back content uri', contentUri);
     return ghostIntent.setAvatarUrl(contentUri);
+  }
+
+ /**
+   * Sets the room avatar using a regular URL
+   * Will check to see if an existing avatar exists, and if so,
+   * will check if they are the same and only replace if they differ
+   *
+   * @param {Intent} ghostIntent represents the ghost user
+   * @param {string} room_id id of the matrix room to set the avatar for
+   * @param {string} avatar a resource on the public web
+   * @returns {Promise}
+   */
+  async setRoomAvatar(room_id, avatar) {
+    const { info }  = debug(this.setRoomAvatar.name);
+    const botIntent = this.getIntentFromApplicationServerBot();
+    const client = botIntent.getClient();
+
+    const text = "avatar_" + room_id + Date.now();
+
+    let upload = async(buffer, opts) => {
+      const res = await client.uploadContent(buffer, Object.assign({
+        name: text,
+        type: mimetype,
+        rawResponse: false
+      }, opts || {}));
+      return {
+        content_uri: res.content_uri || res,
+        size: buffer.length
+      };
+    };
+
+    info('fetching avatar from', avatar);
+    let buffer, mimetype;
+    if(typeof avatar == "string") {
+      buffer = await download.getBufferAndType(avatar).buffer;
+      mimetype = await download.getBufferAndType(avatar).type;
+    } else {
+      buffer = avatar.buffer;
+      mimetype = avatar.type;
+    }
+
+    let res = await upload(buffer, { type: mimetype });
+    const contentUri = res.content_uri;
+    info('uploaded avatar and got back content uri', contentUri);
+    return botIntent.setRoomAvatar(room_id, contentUri);
   }
 }
 
