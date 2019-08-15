@@ -15,6 +15,7 @@ These bridges have been built using matrix-puppet-bridge:
 * https://github.com/matrix-hacks/matrix-puppet-hangouts
 * https://github.com/matrix-hacks/matrix-puppet-signal
 * https://github.com/matrix-hacks/matrix-puppet-skype
+* https://github.com/matrix-hacks/matrix-puppet-mattermost
 
 ## FAQ
 
@@ -49,7 +50,7 @@ That said, we are open to proposals in which we can solve 2 and 3, which would a
 
 ### Q: What about service X?
 
-Right now I recommend you look at the examples. Right now the most complex example in terms of creating a client is imessage. The most complex example in terms of needing to make additional calls like looking up user info, check out the facebook one. For a basic middle-ground, check the groupme one.
+Right now I recommend you look at the examples. Right now the most complex example in terms of creating a client is imessage. The most complex example in terms of needing to make additional calls like looking up user info, check out the facebook one. For a basic middle-ground, check the groupme one. For a really simple one, check the mattermost one.
 
 ### Q: What's puppetting and why does this use it?
 
