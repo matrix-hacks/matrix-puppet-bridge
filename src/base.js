@@ -160,6 +160,20 @@ class Base {
   }
 
   /**
+   * Implement how a sticker message is sent over the third party network
+   *
+   * @param {string} _thirdPartyRoomId
+   * @param {object} _messageData
+   * @param {object} _matrixEvent
+   * @returns {Promise}
+   */
+   async sendStickerMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent) {
+     const { warn } = debug();
+     warn('sticker handling is not implemented for third party, trying to send it as an image');
+     return await this.sendImageMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent);
+   }
+    
+  /**
    * Implement how a file message is sent over the third party network
    *
    * @param {string} _thirdPartyRoomId
@@ -969,14 +983,8 @@ class Base {
   handleMatrixEvent(req, _context) {
     const { info, warn } = debug(this.handleMatrixEvent.name);
     const data = req.getData();
-    if(data.type === 'm.sticker') {
-        info('incoming sticker.');
-        info('converting sticker to image.');
-        data['content']['msgtype'] = 'm.image';
-        data['type'] = 'm.room.message';
-    }
-    if (data.type === 'm.room.message') {
-      info('incoming message. data:', data);
+    if (data.type === 'm.room.message' || data.type == 'm.sticker' ) {
+      info('incoming message (or sticker). data:', data);
       return this.handleMatrixMessageEvent(data);
     } else {
       return warn('ignored a matrix event', data.type);
@@ -1034,6 +1042,17 @@ class Base {
         width: data.content.info.w,
         height: data.content.info.h,
         size: data.content.info.size,
+      }, data);
+    }
+    if (data.type === 'm.sticker') {
+      logger.info("sticker upload from client");
+
+      let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
+      return await this.sendStickerMessageAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
+        url, text: msg,
+        mimetype: data.content.info.mimetype,
+        size: data.content.info.size,
+        filename: data.content.filename || body || '',
       }, data);
     }
     if (msgtype === 'm.file') {
