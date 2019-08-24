@@ -1087,8 +1087,9 @@ class Base {
     info('fetching avatar from', avatar);
     let buffer, mimetype;
     if(typeof avatar == "string") {
-      buffer = await download.getBufferAndType(avatar).buffer;
-      mimetype = await download.getBufferAndType(avatar).type;
+      let downloadedData = await download.getBufferAndType(avatar);
+      buffer = downloadedData.buffer;
+      mimetype = downloadedData.type;
     } else {
       buffer = avatar.buffer;
       mimetype = avatar.type;
