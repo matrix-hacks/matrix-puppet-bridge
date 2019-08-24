@@ -969,6 +969,12 @@ class Base {
   handleMatrixEvent(req, _context) {
     const { info, warn } = debug(this.handleMatrixEvent.name);
     const data = req.getData();
+    if(data.type === 'm.sticker') {
+        info('incoming sticker.');
+        info('converting sticker to image.');
+        data['content']['msgtype'] = 'm.image';
+        data['type'] = 'm.room.message';
+    }
     if (data.type === 'm.room.message') {
       info('incoming message. data:', data);
       return this.handleMatrixMessageEvent(data);
