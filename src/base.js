@@ -298,34 +298,42 @@ class Base {
     }));
   }
 
-  /**
-   * Returns a promise
-   */
-  async _joinPuppetClientToRoom(matrixRoomId) {
-    const botIntent = this.getIntentFromApplicationServerBot();
-    const botClient = botIntent.getClient();
-
-    const puppetClient = this.puppet.getClient();
-    const puppetUserId = puppetClient.credentials.userId;
-
-    await botClient.invite(matrixRoomId, puppetUserId);
-    await puppetClient.joinRoom(matrixRoomId);
-  }
-
   async _grantPuppetMaxPowerLevel(room_id) {
-    const { info, warn } = debug(this._grantPuppetMaxPowerLevel.name);
+    const { info } = debug(this._grantPuppetMaxPowerLevel.name);
     const puppetClient = this.puppet.getClient();
     const puppetUserId = puppetClient.credentials.userId;
 
     const botIntent = this.getIntentFromApplicationServerBot();
-    info("ensuring puppet user has full power over this room");
+    info("ensuring puppet user has full power over this room", room_id);
+    let pwrEvent;
     try {
-      await botIntent.setPowerLevel(room_id, puppetUserId, 100);
-      info('granted puppet client admin status on the protocol status room');
+      const pwrLevel = botIntent.opts.backingStore.getPowerLevelContent(room_id);
+
+      if (pwrLevel) {
+        pwrEvent = await Promise.resolve(pwrLevel);
+        await botIntent.opts.backingStore.setPowerLevelContent(room_id, pwrEvent);
+
+        if (pwrEvent.users[puppetUserId] == 100) {
+          info("puppet already has full control over room:", room_id);
+          return room_id;
+        }
+
+        await botIntent.setPowerLevel(room_id, puppetUserId, 100);
+        info('granted puppet client admin status on the room:', room_id);
+
+        botIntent.leave(room_id);
+        info('bot left room:', room_id);
+      } else {
+        await Promise.resolve();
+        info("attempting to retrieve power levels with puppet user on room_id:", room_id);
+        pwrEvent = puppetClient.getStateEvent(room_id, "m.room.power_levels", "");
+      }
     } catch(err) {
-      warn(err);
-      warn('ignoring failed attempt to give puppet client admin on the status room');
+      info("ignoring failed attempt at retrieving power levels with puppet user on room_id:", room_id);
+      info("re-attempting to retrieve power levels with bot user on room_id:", room_id);
+      pwrEvent = botIntent.client.getStateEvent(room_id, "m.room.power_levels", "")
     }
+          
     return room_id;
   }
 
@@ -562,6 +570,7 @@ class Base {
     const puppetClient = this.puppet.getClient();
     const botIntent = this.getIntentFromApplicationServerBot();
     const botClient = botIntent.getClient();
+    const puppetUserId = puppetClient.credentials.userId;
 
     let matrixRoomId;
     try {
@@ -572,14 +581,15 @@ class Base {
       info("the room doesn't exist. we need to create it for the first time");
       const thirdPartyRoomData = await this.getThirdPartyRoomDataById(thirdPartyRoomId);
       info("got 3p room data", thirdPartyRoomData);
-      const { name, topic, avatar } = thirdPartyRoomData;
+      const { name, topic, avatar, is_direct } = thirdPartyRoomData;
       info("creating room !!!!", ">>>>"+roomAliasName+"<<<<", name, topic);
       const { room_id } = await botIntent.createRoom({
         createAsClient: true, // bot won't auto-join the room in this case
         options: {
-          name, topic, room_alias_name: roomAliasName
+          name, topic, is_direct,
+          invite: [puppetUserId], room_alias_name: roomAliasName
         }
-      })
+      });
       info("room created", room_id, roomAliasName);
 
       if(avatar) {
@@ -592,7 +602,7 @@ class Base {
 
     info("making puppet join room", matrixRoomId);
     try {
-      await this._joinPuppetClientToRoom(matrixRoomId);
+      await puppetClient.joinRoom(matrixRoomId);
       info("returning room id after join room attempt", matrixRoomId);
       await this._grantPuppetMaxPowerLevel(matrixRoomId);
     } catch(err) {
@@ -653,6 +663,9 @@ class Base {
     const { info } = debug(this.getUserClient.name);
     info("get user client for third party user %s (%s)", senderId, senderName);
 
+     // Why is this not just on the base object?
+    const puppetClient = this.puppet.getClient()
+
     if (senderId === undefined) {
       return this.puppet.getClient();
     }
@@ -672,9 +685,15 @@ class Base {
     info("this message was not sent by me");
     const ghostIntent = await this.getIntentFromThirdPartySenderId(senderId, senderName, avatar);
     const statusRoomId = await this.getStatusRoomId();
-    await ghostIntent.join(statusRoomId);
-    await ghostIntent.join(roomId);
-    return await ghostIntent.getClient();
+    try {
+      await ghostIntent.join(statusRoomId);
+      await puppetClient.invite(roomId, ghostIntent.client.credentials.userId);
+      await ghostIntent.join(roomId);
+    } catch {
+      console.log("got ya");
+    }
+    
+    return ghostIntent.getClient();
   }
 
   messageIsFromThirdParty(senderId, messageText, attachedFilePath = '') {
