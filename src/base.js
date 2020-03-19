@@ -474,7 +474,8 @@ class Base {
       return null;
     }
     info('reducing array of alases to a 3prid');
-    return room.getAliases().reduce((result, alias) => {
+    const aliases = [room.getCanonicalAlias()].concat(room.getAliases());
+    return aliases.reduce((result, alias) => {
       const localpart = alias.replace(':'+this.domain, '');
       const matches = localpart.match(patt);
       return matches ? matches[1] : result;
