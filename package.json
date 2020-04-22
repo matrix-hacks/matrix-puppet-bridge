@@ -20,22 +20,22 @@
     "url": "https://github.com/matrix-hacks/matrix-puppet-bridge.git"
   },
   "dependencies": {
-    "bluebird": "^3.4.6",
-    "concat-stream": "^1.6.0",
-    "debug": "^2.6.0",
+    "bluebird": "^3.7.2",
+    "concat-stream": "^2.0.0",
+    "debug": "^4.1.1",
     "fluent-ffmpeg": "^2.1.2",
-    "image-size": "^0.7.3",
-    "matrix-appservice-bridge": "^1.4.0a",
-    "matrix-js-sdk": "^1.0.4",
-    "mime-types": "^2.1.23",
-    "needle": "^1.4.5",
+    "image-size": "^0.8.3",
+    "matrix-appservice-bridge": "^1.12.2",
+    "matrix-js-sdk": "^5.2.0",
+    "mime-types": "^2.1.26",
+    "needle": "^2.4.1",
     "read": "^1.0.7",
-    "tempfile": "^1.1.1",
-    "tmp": "^0.0.31"
+    "tempfile": "^3.0.0",
+    "tmp": "^0.1.0"
   },
   "devDependencies": {
-    "eslint": "^3.12.2",
-    "jsdoc": "^3.4.3"
+    "eslint": "^6.8.0",
+    "jsdoc": "^3.6.4"
   },
   "eslintConfig": {
     "env": {
