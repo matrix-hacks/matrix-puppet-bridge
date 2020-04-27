@@ -321,8 +321,6 @@ class Base {
         await botIntent.setPowerLevel(room_id, puppetUserId, 100);
         info('granted puppet client admin status on the room:', room_id);
 
-        botIntent.leave(room_id);
-        info('bot left room:', room_id);
       } else {
         await Promise.resolve();
         info("attempting to retrieve power levels with puppet user on room_id:", room_id);
@@ -496,7 +494,7 @@ class Base {
       return null;
     }
     info('reducing array of alases to a 3prid');
-    const aliases = [room.getCanonicalAlias()].concat(room.getAliases());
+    const aliases = [room.getCanonicalAlias()].concat(room.getAliases()).concat(room.getAltAliases());
     return aliases.reduce((result, alias) => {
       const localpart = alias.replace(':'+this.domain, '');
       const matches = localpart.match(patt);
@@ -573,22 +571,17 @@ class Base {
     const botClient = botIntent.getClient();
     const puppetUserId = puppetClient.credentials.userId;
 
-    let matrixRoomId;
-    try {
-      const { room_id } = await puppetClient.getRoomIdForAlias(roomAlias);
-      info("found matrix room via alias. room_id:", room_id);
-      matrixRoomId = room_id;
-    } catch(_err) {
-      info("the room doesn't exist. we need to create it for the first time");
+    let createRoom = async () => {
       const thirdPartyRoomData = await this.getThirdPartyRoomDataById(thirdPartyRoomId);
       info("got 3p room data", thirdPartyRoomData);
-      const { name, topic, avatar, is_direct } = thirdPartyRoomData;
-      info("creating room !!!!", ">>>>"+roomAliasName+"<<<<", name, topic);
+      const { name, topic, avatar, is_direct } = thirdPartyRoomData;    
+      info("creating room", roomAliasName, name, topic);
       const { room_id } = await botIntent.createRoom({
         createAsClient: true, // bot won't auto-join the room in this case
         options: {
           name, topic, is_direct,
-          invite: [puppetUserId], room_alias_name: roomAliasName
+          invite: [puppetUserId], 
+          room_alias_name: roomAliasName
         }
       });
       info("room created", room_id, roomAliasName);
@@ -598,20 +591,50 @@ class Base {
         this.setRoomAvatar(room_id, avatar);
       }
 
+      return room_id;
+    };
+
+    // If we can not use the old room, we delete the alias and create a new room.
+    let recreateRoom = async () => {
+      await botClient.deleteAlias(roomAlias);
+      warn('deleted alias... trying again to get or create room.');
+      let room_id = await createRoom();
+
+      return room_id;
+    }
+
+    let matrixRoomId;
+    try {
+      const { room_id } = await botClient.getRoomIdForAlias(roomAlias);
+      info("found matrix room via alias. roomId:", room_id);
       matrixRoomId = room_id;
+    } catch(err) {
+      info("the room doesn't exist. we need to create it for the first time");
+      matrixRoomId = await createRoom();
+    }
+
+    try {
+      const roomsBot = await botClient.getJoinedRooms();
+      const hasBotJoined = roomsBot.joined_rooms.includes(matrixRoomId);
+
+      if (!hasBotJoined) {
+        warn("the found room does not contain the bot, thus we have to create a new room");
+        matrixRoomId = await recreateRoom();
+      }
+    } catch(err) {
+      warn("checking if the bot is in the found room failed:", err.message);
     }
 
     info("making puppet join room", matrixRoomId);
     try {
+      await botIntent.invite(matrixRoomId, puppetUserId);
       await puppetClient.joinRoom(matrixRoomId);
       info("returning room id after join room attempt", matrixRoomId);
       await this._grantPuppetMaxPowerLevel(matrixRoomId);
     } catch(err) {
-      if ( err.message === 'No known servers' ) {
-        warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
-        await botClient.deleteAlias(roomAlias);
-        warn('deleted alias... trying again to get or create room.');
-        matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId);
+      if (err.message === "No known servers") {
+        warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too).');
+        matrixRoomId = await recreateRoom();
       } else {
         warn("ignoring error from puppet join room: ", err.message);
       }
@@ -634,15 +657,15 @@ class Base {
     info("restore alias when binding was broken", matrixRoomId);
     try {
       const room = puppetClient.getRoom(matrixRoomId);
-      const aliases = room.getAliases();
-
+      const aliases = [room.getCanonicalAlias()].concat(room.getAliases()).concat(room.getAltAliases());
+      
       if (!aliases.includes(roomAlias)) {
         await botIntent.sendStateEvent(matrixRoomId, "m.room.aliases", this.domain, {
           aliases: aliases.concat(roomAlias),
         });
       }
     } catch(err) {
-      warn("room alias restoring was failed Error:", err.message);
+      warn("room alias restoring failed:", err.message);
     }
 
     this.puppet.saveThirdPartyRoomId(matrixRoomId, thirdPartyRoomId);
