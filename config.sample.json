@@ -8,5 +8,8 @@
     "homeserverUrl":"https://synapse.keyvan.pw",
     "domain": "synapse.keyvan.pw",
     "registration": "groupme-registration.yaml"
+    "eventStore": "data/puppet-events.db",
+    "userStore": "data/puppet-users.db",
+    "roomStore": "data/puppet-rooms.db"
   }
 }
