@@ -625,12 +625,16 @@ class Base {
       warn("checking if the bot is in the found room failed:", err.message);
     }
 
-    info("making puppet join room", matrixRoomId);
+    info("Ensuring puppet joined room", puppetUserId, matrixRoomId);
     try {
-      await botIntent.invite(matrixRoomId, puppetUserId);
-      await puppetClient.joinRoom(matrixRoomId);
-      info("returning room id after join room attempt", matrixRoomId);
-      await this._grantPuppetMaxPowerLevel(matrixRoomId);
+      const roomsPuppet = await puppetClient.getJoinedRooms();
+      const hasPuppetJoined = roomsPuppet.joined_rooms.includes(matrixRoomId);
+      if (!hasPuppetJoined) {
+        await botIntent.invite(matrixRoomId, puppetUserId);
+        await puppetClient.joinRoom(matrixRoomId);
+        info("returning room id after join room attempt", matrixRoomId);
+        await this._grantPuppetMaxPowerLevel(matrixRoomId);
+      }
     } catch(err) {
       if (err.message === "No known servers") {
         warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too).');
