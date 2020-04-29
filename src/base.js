@@ -1001,6 +1001,9 @@ class Base {
       senderId,
       avatar,
       text,
+      quotedEventId,
+      quotedUserId,
+      quotedText,
       html
     } = thirdPartyRoomMessageData;
 
@@ -1009,6 +1012,19 @@ class Base {
 
     if (!this.messageIsFromThirdParty(senderId, text)) {
       return;
+    }
+    
+    if (quotedEventId != null && quotedUserId != null && quotedText != null && this.bridge.getEventStore()) {
+      const quotedUserIntent = await this.getIntentFromThirdPartySenderId(quotedUserId);
+      const quotedUser = quotedUserIntent.client.credentials.userId;
+      //Get event and roomId from the eventstore to look for the quote
+      const quotedEventEntry = await this.bridge.getEventStore().getEntryByRemoteId(quotedEventId, roomId);
+      if (quotedEventEntry != null && quotedUser != null) {
+        const quoteMatrixRoomId = quotedEventEntry.getMatrixRoomId();
+        const quoteMatrixEventId = quotedEventEntry.getMatrixEventId();        
+        html = this.formatTextToQuote(quoteMatrixRoomId, quoteMatrixEventId, quotedUser, quotedText, text);
+        text = "> <" + quotedUser + "> " + quotedText + "\\n \\n" +text; 
+      }
     }
 
     let tag = autoTagger(senderId, this);
@@ -1025,6 +1041,10 @@ class Base {
       body: tag(text),
       msgtype: "m.text"
     });
+  }
+  //TODO: do this the correct way
+  formatTextToQuote(roomId, eventId, quotedUserId, quotedText, text) {
+    return "<mx-reply><blockquote><a href=\"https://matrix.to/#/" + roomId + "/" + eventId + "\">In reply to</a> <a href=\"https://matrix.to/#/" + quotedUserId + "\">" + quotedUserId + "</a><br>" + quotedText + "</blockquote></mx-reply>" + text;
   }
 
   handleMatrixEvent(req, _context) {
