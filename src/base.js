@@ -1014,11 +1014,12 @@ class Base {
       return;
     }
     
+  //TODO: do this the correct way
     if (quotedEventId != null && quotedUserId != null && quotedText != null && this.bridge.getEventStore()) {
       const quotedUserIntent = await this.getIntentFromThirdPartySenderId(quotedUserId);
       const quotedUser = quotedUserIntent.client.credentials.userId;
       //Get event and roomId from the eventstore to look for the quote
-      const quotedEventEntry = await this.bridge.getEventStore().getEntryByRemoteId(quotedEventId, roomId);
+      const quotedEventEntry = await this.bridge.getEventStore().getEntryByRemoteId(quotedEventId, quotedUserId);
       if (quotedEventEntry != null && quotedUser != null) {
         const quoteMatrixRoomId = quotedEventEntry.getMatrixRoomId();
         const quoteMatrixEventId = quotedEventEntry.getMatrixEventId();        
