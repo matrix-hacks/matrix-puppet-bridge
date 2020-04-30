@@ -1004,6 +1004,7 @@ class Base {
       quotedEventId,
       quotedUserId,
       quotedText,
+      myUserId,
       html
     } = thirdPartyRoomMessageData;
 
@@ -1017,14 +1018,20 @@ class Base {
   //TODO: do this the correct way
     if (quotedEventId != null && quotedUserId != null && quotedText != null && this.bridge.getEventStore()) {
       const quotedUserIntent = await this.getIntentFromThirdPartySenderId(quotedUserId);
-      const quotedUser = quotedUserIntent.client.credentials.userId;
+      let quotedUser = quotedUserIntent.client.credentials.userId;
+      let quotedEventEntry = await this.bridge.getEventStore().getEntryByRemoteId(quotedEventId, quotedUserId);
+      if (myUserId == quotedUserId) {
+        quotedUser = this.puppet.getClient().credentials.userId;
+      }
       //Get event and roomId from the eventstore to look for the quote
-      const quotedEventEntry = await this.bridge.getEventStore().getEntryByRemoteId(quotedEventId, quotedUserId);
       if (quotedEventEntry != null && quotedUser != null) {
         const quoteMatrixRoomId = quotedEventEntry.getMatrixRoomId();
         const quoteMatrixEventId = quotedEventEntry.getMatrixEventId();        
         html = this.formatTextToQuote(quoteMatrixRoomId, quoteMatrixEventId, quotedUser, quotedText, text);
         text = "> <" + quotedUser + "> " + quotedText + "\\n \\n" +text; 
+      }
+      else {
+        info("Did not find event for", quotedEventId, quotedUserId);
       }
     }
 
