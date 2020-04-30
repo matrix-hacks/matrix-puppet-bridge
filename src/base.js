@@ -172,6 +172,19 @@ class Base {
      warn('sticker handling is not implemented for third party, trying to send it as an image');
      return await this.sendImageMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent);
    }
+
+  /**
+   * Implement how a reaction is sent over the third party network
+   *
+   * @param {string} _thirdPartyRoomId
+   * @param {object} _messageData
+   * @param {object} _matrixEvent
+   * @returns {Promise}
+   */
+   async sendReactionAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _matrixEvent) {
+     const { warn } = debug();
+     warn('reaction handling is not implemented for third party, ignoring event');
+   }
     
   /**
    * Implement how a file message is sent over the third party network
@@ -1058,8 +1071,8 @@ class Base {
   handleMatrixEvent(req, _context) {
     const { info, warn } = debug(this.handleMatrixEvent.name);
     const data = req.getData();
-    if (data.type === 'm.room.message' || data.type == 'm.sticker' ) {
-      info('incoming message (or sticker). data:', data);
+    if (data.type === 'm.room.message' || data.type == 'm.sticker' || data.type == 'm.reaction' ) {
+      info('incoming message, sticker or annotation data:', data);
       return this.handleMatrixMessageEvent(data);
     } else {
       return warn('ignored a matrix event', data.type);
@@ -1129,6 +1142,11 @@ class Base {
         size: data.content.info.size,
         filename: data.content.filename || body || '',
       }, data);
+    }
+    if (data.type === 'm.reaction') {
+      logger.info("reaction from riot");
+      
+      return await this.sendReactionAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, data);
     }
     if (msgtype === 'm.file') {
       logger.info("file upload from riot");
