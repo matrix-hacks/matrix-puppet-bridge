@@ -185,6 +185,34 @@ class Base {
      const { warn } = debug();
      warn('reaction handling is not implemented for third party, ignoring event');
    }
+  
+  /**
+   * Implement how a audio is sent over the third party network
+   *
+   * @param {string} _thirdPartyRoomId
+   * @param {object} _messageData
+   * @param {object} _matrixEvent
+   * @returns {Promise}
+   */
+  async sendAudioAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent) {
+     const { warn } = debug();
+     warn('audio handling is not implemented for third party, trying to send it as a normal file');
+     return await this.sendFileMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent);
+  }
+  
+  /**
+   * Implement how a videos are sent over the third party network
+   *
+   * @param {string} _thirdPartyRoomId
+   * @param {object} _messageData
+   * @param {object} _matrixEvent
+   * @returns {Promise}
+   */
+  async sendVideoAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent) {
+     const { warn } = debug();
+     warn('video handling is not implemented for third party, trying to send it as a normal file');
+     return await this.sendFileMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent);
+  }
     
   /**
    * Implement how a file message is sent over the third party network
@@ -1147,6 +1175,30 @@ class Base {
       logger.info("reaction from riot");
       
       return await this.sendReactionAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, data);
+    }    
+    if (msgtype === 'm.audio') {
+      logger.info("audio file from riot");
+      
+      let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
+      return await this.sendAudioAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
+        url, text: msg,
+        mimetype: data.content.info.mimetype,
+        size: data.content.info.size,
+        filename: body || '',
+      }, data);
+    }
+      if (msgtype === 'm.video') {
+        logger.info("video file from riot");
+
+        let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
+        return await this.sendVideoAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
+          url, text: msg,
+          mimetype: data.content.info.mimetype,
+          size: data.content.info.size,
+          height: data.content.info.h,
+          width: data.content.info.w,
+          filename: body || '',
+        }, data);
     }
     if (msgtype === 'm.file') {
       logger.info("file upload from riot");
