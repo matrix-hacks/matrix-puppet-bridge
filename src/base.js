@@ -1019,6 +1019,16 @@ class Base {
 
   /**
    * Returns a promise
+   * quote is expected to either be null or contain:
+   *    userId: the third party id of the quoted user, if undefined that means we quoted ourself
+   *    eventId: the matrix id of the quoted event (inconsistency so the handling of events can be left to implementation for now)
+   *    text: the text that was quoted
+   * reactions is also expected to either be null or or contain:
+   *    roomId: the matrix room idea of the event in which the reaction happened
+   *    eventId: the matrix id of the event it was reacted to (inconsistency so the handling of events can be left to implementation for now)
+   *    emoji: the sent emoji
+   *    
+   *    
    */
   async handleThirdPartyRoomMessage(thirdPartyRoomMessageData) {
     let retry = 5;
@@ -1042,10 +1052,8 @@ class Base {
       senderId,
       avatar,
       text,
-      quotedEventId,
-      quotedUserId,
-      quotedText,
-      myUserId,
+      quote,
+      reaction,
       html
     } = thirdPartyRoomMessageData;
 
@@ -1056,28 +1064,30 @@ class Base {
       return;
     }
     
-  //TODO: do this the correct way
-    if (quotedEventId != null && quotedUserId != null && quotedText != null && this.bridge.getEventStore()) {
-      const quotedUserIntent = await this.getIntentFromThirdPartySenderId(quotedUserId);
-      let quotedUser = quotedUserIntent.client.credentials.userId;
-      let quotedEventEntry = await this.bridge.getEventStore().getEntryByRemoteId(quotedEventId, quotedUserId);
-      if (myUserId == quotedUserId) {
+    if (quote != null) {
+      let quotedUser;
+      if (quote.userId == undefined) {
         quotedUser = this.puppet.getClient().credentials.userId;
       }
-      //Get event and roomId from the eventstore to look for the quote
-      if (quotedEventEntry != null && quotedUser != null) {
-        const quoteMatrixRoomId = quotedEventEntry.getMatrixRoomId();
-        const quoteMatrixEventId = quotedEventEntry.getMatrixEventId();        
-        html = this.formatTextToQuote(quoteMatrixRoomId, quoteMatrixEventId, quotedUser, quotedText, text);
-        text = "> <" + quotedUser + "> " + quotedText + "\\n \\n" +text; 
-      }
       else {
-        info("Did not find event for", quotedEventId, quotedUserId);
+        const quotedUserIntent = await this.getIntentFromThirdPartySenderId(quote.userId);
+        quotedUser = quotedUserIntent.client.credentials.userId;
       }
+      html = this.formatTextToQuote(matrixRoomId, quote.eventId, quotedUser, quote.text, text);
+      text = "> <" + quotedUser + "> " + quote.text + "\\n \\n" +text; 
     }
 
     let tag = autoTagger(senderId, this);
 
+    if (reaction) {
+      return await client.sendEvent(reaction.roomId, "m.reaction", {
+        "m.relates_to": {
+          event_id: reaction.eventId,
+          key: reaction.emoji,
+          rel_type: "m.annotation",
+        }
+      });
+    }
     if (html) {
       return await client.sendMessage(matrixRoomId, {
         body: tag(text),
@@ -1091,9 +1101,10 @@ class Base {
       msgtype: "m.text"
     });
   }
-  //TODO: do this the correct way
-  formatTextToQuote(roomId, eventId, quotedUserId, quotedText, text) {
-    return "<mx-reply><blockquote><a href=\"https://matrix.to/#/" + roomId + "/" + eventId + "\">In reply to</a> <a href=\"https://matrix.to/#/" + quotedUserId + "\">" + quotedUserId + "</a><br>" + quotedText + "</blockquote></mx-reply>" + text;
+  
+  //This is a dirty hack that is likely to fail, so should be replaced at one point
+  formatTextToQuote(quotedRoomId, quotedEventId, quotedUserId, quotedText, text) {
+    return "<mx-reply><blockquote><a href=\"https://matrix.to/#/" + quotedRoomId + "/" + quotedEventId + "\">In reply to</a> <a href=\"https://matrix.to/#/" + quotedUserId + "\">" + quotedUserId + "</a><br>" + quotedText + "</blockquote></mx-reply>" + text;
   }
 
   handleMatrixEvent(req, _context) {
@@ -1175,7 +1186,7 @@ class Base {
       logger.info("reaction from riot");
       
       return await this.sendReactionAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, data);
-    }    
+    }
     if (msgtype === 'm.audio') {
       logger.info("audio file from riot");
       
@@ -1186,20 +1197,20 @@ class Base {
         size: data.content.info.size,
         filename: body || '',
       }, data);
-    }
-      if (msgtype === 'm.video') {
-        logger.info("video file from riot");
-
-        let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
-        return await this.sendVideoAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
-          url, text: msg,
-          mimetype: data.content.info.mimetype,
-          size: data.content.info.size,
-          height: data.content.info.h,
-          width: data.content.info.w,
-          filename: body || '',
-        }, data);
-    }
+  }
+    if (msgtype === 'm.video') {
+      logger.info("video file from riot");
+      
+      let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
+      return await this.sendVideoAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
+        url, text: msg,
+        mimetype: data.content.info.mimetype,
+        size: data.content.info.size,
+        height: data.content.info.h,
+        width: data.content.info.w,
+        filename: body || '',
+      }, data);
+  }
     if (msgtype === 'm.file') {
       logger.info("file upload from riot");
 
