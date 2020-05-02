@@ -1197,10 +1197,10 @@ class Base {
         size: data.content.info.size,
         filename: body || '',
       }, data);
-  }
+    }
     if (msgtype === 'm.video') {
       logger.info("video file from riot");
-      
+
       let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
       return await this.sendVideoAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
         url, text: msg,
@@ -1210,7 +1210,7 @@ class Base {
         width: data.content.info.w,
         filename: body || '',
       }, data);
-  }
+    }
     if (msgtype === 'm.file') {
       logger.info("file upload from riot");
 
