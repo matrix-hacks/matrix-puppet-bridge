@@ -1080,13 +1080,18 @@ class Base {
     let tag = autoTagger(senderId, this);
 
     if (reaction) {
-      return await client.sendEvent(reaction.roomId, "m.reaction", {
-        "m.relates_to": {
-          event_id: reaction.eventId,
-          key: reaction.emoji,
-          rel_type: "m.annotation",
-        }
-      });
+      try {
+        return await client.sendEvent(reaction.roomId, "m.reaction", {
+          "m.relates_to": {
+            event_id: reaction.eventId,
+            key: reaction.emoji,
+            rel_type: "m.annotation",
+          }
+        });
+      }
+      catch (err) {
+        //We catch all errors as reactions are not important        
+      }
     }
     if (html) {
       return await client.sendMessage(matrixRoomId, {
@@ -1200,7 +1205,7 @@ class Base {
     }
     if (msgtype === 'm.video') {
       logger.info("video file from riot");
-
+      
       let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
       return await this.sendVideoAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
         url, text: msg,
