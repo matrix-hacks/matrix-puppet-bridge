@@ -1063,6 +1063,8 @@ class Base {
     if (!this.messageIsFromThirdParty(senderId, text)) {
       return;
     }
+
+    let tag = autoTagger(senderId, this);
     
     if (quote != null) {
       let quotedUser;
@@ -1075,10 +1077,18 @@ class Base {
       }
       html = this.formatTextToQuote(matrixRoomId, quote.eventId, quotedUser, quote.text, text);
       text = "> <" + quotedUser + "> " + quote.text + "\\n \\n" +text; 
+      return await client.sendMessage(matrixRoomId, {
+        body: tag(text),
+        formatted_body: html,
+        format: "org.matrix.custom.html",
+        msgtype: "m.text",
+        "m.relates_to": {
+          "m.in_reply_to": {
+            event_id: quote.eventId,
+          } 
+        },
+      });
     }
-
-    let tag = autoTagger(senderId, this);
-
     if (reaction) {
       try {
         return await client.sendEvent(reaction.roomId, "m.reaction", {
