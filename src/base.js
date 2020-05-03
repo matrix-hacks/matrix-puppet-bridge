@@ -1046,7 +1046,7 @@ class Base {
   async _handleThirdPartyRoomMessage(thirdPartyRoomMessageData) {
     const { info } = debug(this.handleThirdPartyRoomMessage.name);
     info('handling third party room message', thirdPartyRoomMessageData);
-    let {
+    const {
       roomId,
       senderName,
       senderId,
