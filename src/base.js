@@ -891,7 +891,7 @@ class Base {
     } catch(err) {
       warn('upload error', err);
       // If we can't upload the file just send a plain text message with the url or file path.
-      return await client.sendMessage(matrixRoomId, {body: tag(url || path || text), msgtype: "m.text"});
+      return await client.sendMessage(matrixRoomId, {body: tag(url || path || text || "Unhandled file, maybe it was to big for the homeserver?"), msgtype: "m.text"});
     }
 
     const { content_uri, size } = res;
