@@ -1075,11 +1075,11 @@ class Base {
         const quotedUserIntent = await this.getIntentFromThirdPartySenderId(quote.userId);
         quotedUser = quotedUserIntent.client.credentials.userId;
       }
-      html = this.formatTextToQuote(matrixRoomId, quote.eventId, quotedUser, quote.text, text);
-      text = "> <" + quotedUser + "> " + quote.text + "\\n \\n" +text; 
+      const quoteHtml = this.formatTextToQuote(matrixRoomId, quote.eventId, quotedUser, quote.text, text);
+      const quoteText = "> <" + quotedUser + "> " + quote.text + "\\n \\n" +text; 
       return await client.sendMessage(matrixRoomId, {
-        body: tag(text),
-        formatted_body: html,
+        body: tag(quoteText),
+        formatted_body: quoteHtml,
         format: "org.matrix.custom.html",
         msgtype: "m.text",
         "m.relates_to": {
