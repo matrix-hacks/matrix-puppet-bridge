@@ -723,12 +723,11 @@ class Base {
 
     info("Update room avatar", matrixRoomId);
     try {
-        const thirdPartyRoomData = await this.getThirdPartyRoomDataById(thirdPartyRoomId);
-        const { avatar } = thirdPartyRoomData;
-        if(avatar) {
-          this.setRoomAvatar(matrixRoomId, avatar);
-        }
-      }      
+      const thirdPartyRoomData = await this.getThirdPartyRoomDataById(thirdPartyRoomId);
+      const { avatar } = thirdPartyRoomData;
+      if(avatar) {
+        this.setRoomAvatar(matrixRoomId, avatar);
+      }
     } catch(err) {
       warn("Updating room avatar failed:", err.message);
     }
