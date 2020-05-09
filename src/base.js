@@ -248,6 +248,19 @@ class Base {
   }
 
   /**
+   * Implement how leaving a room is handled
+   *
+   * @param {string} _thirdPartyRoomId
+   * @param {object} _messageData
+   * @param {object} _matrixEvent
+   * @returns {Promise}
+   */
+   async sendLeavingEventAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _matrixEvent) {
+     const { warn } = debug();
+     warn('leaving room is not implemented for third party, ignoring event');
+   }
+
+  /**
    * Return a postfix for the status room name.
    * It should be fairly unique so that it's unlikely to clash with a legitmate user.
    * (Let's hope nobody likes the name 'puppetStatusRoom')
@@ -615,7 +628,7 @@ class Base {
     let createRoom = async () => {
       const thirdPartyRoomData = await this.getThirdPartyRoomDataById(thirdPartyRoomId);
       info("got 3p room data", thirdPartyRoomData);
-      const { name, topic, avatar, is_direct } = thirdPartyRoomData;    
+      const { name, topic, is_direct } = thirdPartyRoomData;    
       info("creating room", roomAliasName, name, topic);
       const { room_id } = await botIntent.createRoom({
         createAsClient: true, // bot won't auto-join the room in this case
@@ -626,11 +639,6 @@ class Base {
         }
       });
       info("room created", room_id, roomAliasName);
-
-      if(avatar) {
-        info("setting room avatar", room_id);
-        this.setRoomAvatar(room_id, avatar);
-      }
 
       return room_id;
     };
@@ -712,6 +720,21 @@ class Base {
     } catch(err) {
       warn("room alias restoring failed:", err.message);
     }
+
+    info("Update room avatar", matrixRoomId);
+    try {
+        const thirdPartyRoomData = await this.getThirdPartyRoomDataById(thirdPartyRoomId);
+        const { avatar } = thirdPartyRoomData;
+        if(avatar) {
+          this.setRoomAvatar(matrixRoomId, avatar);
+        }
+      }      
+    } catch(err) {
+      warn("Updating room avatar failed:", err.message);
+    }
+    
+    
+
 
     this.puppet.saveThirdPartyRoomId(matrixRoomId, thirdPartyRoomId);
     return matrixRoomId;
@@ -889,9 +912,9 @@ class Base {
         throw new Error('missing url or path');
       }
     } catch(err) {
-      warn('upload error', err);
+      warn('upload error, maybe file to big?', err);
       // If we can't upload the file just send a plain text message with the url or file path.
-      return await client.sendMessage(matrixRoomId, {body: tag(url || path || text || "Unhandled file, maybe it was to big for the homeserver?"), msgtype: "m.text"});
+      return await client.sendMessage(matrixRoomId, {body: tag(url || path || text || "Unhandled image file"), msgtype: "m.text"});
     }
 
     const { content_uri, size } = res;
@@ -1075,11 +1098,11 @@ class Base {
         const quotedUserIntent = await this.getIntentFromThirdPartySenderId(quote.userId);
         quotedUser = quotedUserIntent.client.credentials.userId;
       }
-      const quoteHtml = this.formatTextToQuote(matrixRoomId, quote.eventId, quotedUser, quote.text, text);
-      const quoteText = "> <" + quotedUser + "> " + quote.text + "\\n \\n" +text; 
+      html = this.formatTextToQuote(matrixRoomId, quote.eventId, quotedUser, quote.text, text);
+      text = "> <" + quotedUser + "> " + quote.text + "\\n \\n" +text; 
       return await client.sendMessage(matrixRoomId, {
-        body: tag(quoteText),
-        formatted_body: quoteHtml,
+        body: tag(text),
+        formatted_body: html,
         format: "org.matrix.custom.html",
         msgtype: "m.text",
         "m.relates_to": {
@@ -1125,10 +1148,17 @@ class Base {
   handleMatrixEvent(req, _context) {
     const { info, warn } = debug(this.handleMatrixEvent.name);
     const data = req.getData();
-    if (data.type === 'm.room.message' || data.type == 'm.sticker' || data.type == 'm.reaction' ) {
+    if (data.type === 'm.room.message' || data.type == 'm.sticker' || data.type == 'm.reaction') {
       info('incoming message, sticker or annotation data:', data);
       return this.handleMatrixMessageEvent(data);
-    } else {
+    }  
+    else if (data.type == 'm.room.member') {
+      if (data.content.membership == 'leave') {
+        info('leaving room:', data.room_id);
+        return this.sendLeavingEventAsPuppetToThirdPartyRoomWithId(data.room_id, data);
+      }
+    }
+    else {
       return warn('ignored a matrix event', data.type);
     }
   }
