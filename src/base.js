@@ -911,9 +911,9 @@ class Base {
         throw new Error('missing url or path');
       }
     } catch(err) {
-      warn('upload error, maybe file to big?', err);
+      warn('upload error', err);
       // If we can't upload the file just send a plain text message with the url or file path.
-      return await client.sendMessage(matrixRoomId, {body: tag(url || path || text || "Unhandled image file"), msgtype: "m.text"});
+      return await client.sendMessage(matrixRoomId, {body: tag(url || path || text || "Unhandled file, maybe it was to big for the homeserver?"), msgtype: "m.text"});
     }
 
     const { content_uri, size } = res;
@@ -1097,11 +1097,11 @@ class Base {
         const quotedUserIntent = await this.getIntentFromThirdPartySenderId(quote.userId);
         quotedUser = quotedUserIntent.client.credentials.userId;
       }
-      html = this.formatTextToQuote(matrixRoomId, quote.eventId, quotedUser, quote.text, text);
-      text = "> <" + quotedUser + "> " + quote.text + "\\n \\n" +text; 
+      const quoteHtml = this.formatTextToQuote(matrixRoomId, quote.eventId, quotedUser, quote.text, text);
+      const quoteText = "> <" + quotedUser + "> " + quote.text + "\\n \\n" +text; 
       return await client.sendMessage(matrixRoomId, {
-        body: tag(text),
-        formatted_body: html,
+        body: tag(quoteText),
+        formatted_body: quoteHtml,
         format: "org.matrix.custom.html",
         msgtype: "m.text",
         "m.relates_to": {
