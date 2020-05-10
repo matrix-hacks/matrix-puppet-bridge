@@ -1154,7 +1154,8 @@ class Base {
     else if (data.type == 'm.room.member') {
       if (data.content.membership == 'leave') {
         info('leaving room:', data.room_id);
-        return this.sendLeavingEventAsPuppetToThirdPartyRoomWithId(data.room_id, data);
+        const thirdPartyRoomId = this.getThirdPartyRoomIdFromMatrixRoomId(data.room_id);
+        return this.sendLeavingEventAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, data);
       }
     }
     else {
