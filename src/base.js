@@ -1379,8 +1379,8 @@ class Base {
 
     const roomState = await botIntent.roomState(room_id);
     const avatarEvent = roomState.find( obj => obj.type == "m.room.avatar");
-    const avatar_url = avatarEvent.content.url;
-    if (avatar_url) {
+    if (avatarEvent) {
+      const avatar_url = avatarEvent.content.url;
       info('check if avatars differ');
       let url = this.homeserver.href + "_matrix/media/v1/download/" + avatar_url.slice(6);
       let prev_buffer = await download.getBuffer(url);
