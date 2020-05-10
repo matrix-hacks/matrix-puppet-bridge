@@ -1377,6 +1377,19 @@ class Base {
       mimetype = avatar.type;
     }
 
+    const roomState = await botIntent.roomState(room_id);
+    const avatarEvent = roomState.find( obj => obj.type == "m.room.avatar");
+    const avatar_url = avatarEvent.content.url;
+    if (avatar_url) {
+      info('check if avatars differ');
+      let url = this.homeserver.href + "_matrix/media/v1/download/" + avatar_url.slice(6);
+      let prev_buffer = await download.getBuffer(url);
+      if (Buffer.compare(buffer, prev_buffer) == 0) { //replace avatar only if they differ
+        info('refusing to overwrite existing avatar');
+        return null;
+      }
+    }
+
     let res = await upload(buffer, { type: mimetype });
     const contentUri = res.content_uri;
     info('uploaded avatar and got back content uri', contentUri);
