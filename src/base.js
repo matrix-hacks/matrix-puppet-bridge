@@ -172,6 +172,47 @@ class Base {
      warn('sticker handling is not implemented for third party, trying to send it as an image');
      return await this.sendImageMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent);
    }
+
+  /**
+   * Implement how a reaction is sent over the third party network
+   *
+   * @param {string} _thirdPartyRoomId
+   * @param {object} _messageData
+   * @param {object} _matrixEvent
+   * @returns {Promise}
+   */
+   async sendReactionAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _matrixEvent) {
+     const { warn } = debug();
+     warn('reaction handling is not implemented for third party, ignoring event');
+   }
+  
+  /**
+   * Implement how a audio is sent over the third party network
+   *
+   * @param {string} _thirdPartyRoomId
+   * @param {object} _messageData
+   * @param {object} _matrixEvent
+   * @returns {Promise}
+   */
+  async sendAudioAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent) {
+     const { warn } = debug();
+     warn('audio handling is not implemented for third party, trying to send it as a normal file');
+     return await this.sendFileMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent);
+  }
+  
+  /**
+   * Implement how a videos are sent over the third party network
+   *
+   * @param {string} _thirdPartyRoomId
+   * @param {object} _messageData
+   * @param {object} _matrixEvent
+   * @returns {Promise}
+   */
+  async sendVideoAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent) {
+     const { warn } = debug();
+     warn('video handling is not implemented for third party, trying to send it as a normal file');
+     return await this.sendFileMessageAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _data, _matrixEvent);
+  }
     
   /**
    * Implement how a file message is sent over the third party network
@@ -205,6 +246,19 @@ class Base {
   async sendTypingEventAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _status) {
     throw new Error('please implement sendTypingEventAsPuppetToThirdPartyRoomWithId');
   }
+
+  /**
+   * Implement how leaving a room is handled
+   *
+   * @param {string} _thirdPartyRoomId
+   * @param {object} _messageData
+   * @param {object} _matrixEvent
+   * @returns {Promise}
+   */
+   async sendLeavingEventAsPuppetToThirdPartyRoomWithId(_thirdPartyRoomId, _matrixEvent) {
+     const { warn } = debug();
+     warn('leaving room is not implemented for third party, ignoring event');
+   }
 
   /**
    * Return a postfix for the status room name.
@@ -321,8 +375,6 @@ class Base {
         await botIntent.setPowerLevel(room_id, puppetUserId, 100);
         info('granted puppet client admin status on the room:', room_id);
 
-        botIntent.leave(room_id);
-        info('bot left room:', room_id);
       } else {
         await Promise.resolve();
         info("attempting to retrieve power levels with puppet user on room_id:", room_id);
@@ -496,7 +548,7 @@ class Base {
       return null;
     }
     info('reducing array of alases to a 3prid');
-    const aliases = [room.getCanonicalAlias()].concat(room.getAliases());
+    const aliases = [room.getCanonicalAlias()].concat(room.getAliases()).concat(room.getAltAliases());
     return aliases.reduce((result, alias) => {
       const localpart = alias.replace(':'+this.domain, '');
       const matches = localpart.match(patt);
@@ -573,45 +625,69 @@ class Base {
     const botClient = botIntent.getClient();
     const puppetUserId = puppetClient.credentials.userId;
 
-    let matrixRoomId;
-    try {
-      const { room_id } = await puppetClient.getRoomIdForAlias(roomAlias);
-      info("found matrix room via alias. room_id:", room_id);
-      matrixRoomId = room_id;
-    } catch(_err) {
-      info("the room doesn't exist. we need to create it for the first time");
+    let createRoom = async () => {
       const thirdPartyRoomData = await this.getThirdPartyRoomDataById(thirdPartyRoomId);
       info("got 3p room data", thirdPartyRoomData);
-      const { name, topic, avatar, is_direct } = thirdPartyRoomData;
-      info("creating room !!!!", ">>>>"+roomAliasName+"<<<<", name, topic);
+      const { name, topic, is_direct } = thirdPartyRoomData;    
+      info("creating room", roomAliasName, name, topic);
       const { room_id } = await botIntent.createRoom({
         createAsClient: true, // bot won't auto-join the room in this case
         options: {
           name, topic, is_direct,
-          invite: [puppetUserId], room_alias_name: roomAliasName
+          invite: [puppetUserId], 
+          room_alias_name: roomAliasName
         }
       });
       info("room created", room_id, roomAliasName);
 
-      if(avatar) {
-        info("setting room avatar", room_id);
-        this.setRoomAvatar(room_id, avatar);
-      }
+      return room_id;
+    };
 
-      matrixRoomId = room_id;
+    // If we can not use the old room, we delete the alias and create a new room.
+    let recreateRoom = async () => {
+      await botClient.deleteAlias(roomAlias);
+      warn('deleted alias... trying again to get or create room.');
+      let room_id = await createRoom();
+
+      return room_id;
     }
 
-    info("making puppet join room", matrixRoomId);
+    let matrixRoomId;
     try {
-      await puppetClient.joinRoom(matrixRoomId);
-      info("returning room id after join room attempt", matrixRoomId);
-      await this._grantPuppetMaxPowerLevel(matrixRoomId);
+      const { room_id } = await botClient.getRoomIdForAlias(roomAlias);
+      info("found matrix room via alias. roomId:", room_id);
+      matrixRoomId = room_id;
     } catch(err) {
-      if ( err.message === 'No known servers' ) {
-        warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too). we need to de-alias it now so a new room gets created that we can actually use.');
-        await botClient.deleteAlias(roomAlias);
-        warn('deleted alias... trying again to get or create room.');
-        matrixRoomId = await this.getOrCreateMatrixRoomFromThirdPartyRoomId(thirdPartyRoomId);
+      info("the room doesn't exist. we need to create it for the first time");
+      matrixRoomId = await createRoom();
+    }
+
+    try {
+      const roomsBot = await botClient.getJoinedRooms();
+      const hasBotJoined = roomsBot.joined_rooms.includes(matrixRoomId);
+
+      if (!hasBotJoined) {
+        warn("the found room does not contain the bot, thus we have to create a new room");
+        matrixRoomId = await recreateRoom();
+      }
+    } catch(err) {
+      warn("checking if the bot is in the found room failed:", err.message);
+    }
+
+    info("Ensuring puppet joined room", puppetUserId, matrixRoomId);
+    try {
+      const roomsPuppet = await puppetClient.getJoinedRooms();
+      const hasPuppetJoined = roomsPuppet.joined_rooms.includes(matrixRoomId);
+      if (!hasPuppetJoined) {
+        await botIntent.invite(matrixRoomId, puppetUserId);
+        await puppetClient.joinRoom(matrixRoomId);
+        info("returning room id after join room attempt", matrixRoomId);
+        await this._grantPuppetMaxPowerLevel(matrixRoomId);
+      }
+    } catch(err) {
+      if (err.message === "No known servers") {
+        warn('we cannot use this room anymore because you cannot currently rejoin an empty room (synapse limitation? riot throws this error too).');
+        matrixRoomId = await recreateRoom();
       } else {
         warn("ignoring error from puppet join room: ", err.message);
       }
@@ -634,16 +710,30 @@ class Base {
     info("restore alias when binding was broken", matrixRoomId);
     try {
       const room = puppetClient.getRoom(matrixRoomId);
-      const aliases = room.getAliases();
-
+      const aliases = [room.getCanonicalAlias()].concat(room.getAliases()).concat(room.getAltAliases());
+      
       if (!aliases.includes(roomAlias)) {
         await botIntent.sendStateEvent(matrixRoomId, "m.room.aliases", this.domain, {
           aliases: aliases.concat(roomAlias),
         });
       }
     } catch(err) {
-      warn("room alias restoring was failed Error:", err.message);
+      warn("room alias restoring failed:", err.message);
     }
+
+    info("Update room avatar", matrixRoomId);
+    try {
+      const thirdPartyRoomData = await this.getThirdPartyRoomDataById(thirdPartyRoomId);
+      const { avatar } = thirdPartyRoomData;
+      if(avatar) {
+        await this.setRoomAvatar(matrixRoomId, avatar);
+      }
+    } catch(err) {
+      warn("Updating room avatar failed:", err.message);
+    }
+    
+    
+
 
     this.puppet.saveThirdPartyRoomId(matrixRoomId, thirdPartyRoomId);
     return matrixRoomId;
@@ -823,7 +913,7 @@ class Base {
     } catch(err) {
       warn('upload error', err);
       // If we can't upload the file just send a plain text message with the url or file path.
-      return await client.sendMessage(matrixRoomId, {body: tag(url || path || text), msgtype: "m.text"});
+      return await client.sendMessage(matrixRoomId, {body: tag(url || path || text || "Unhandled file, maybe it was to big for the homeserver?"), msgtype: "m.text"});
     }
 
     const { content_uri, size } = res;
@@ -951,6 +1041,16 @@ class Base {
 
   /**
    * Returns a promise
+   * quote is expected to either be null or contain:
+   *    userId: the third party id of the quoted user, if undefined that means we quoted ourself
+   *    eventId: the matrix id of the quoted event (inconsistency so the handling of events can be left to implementation for now)
+   *    text: the text that was quoted
+   * reactions is also expected to either be null or or contain:
+   *    roomId: the matrix room idea of the event in which the reaction happened
+   *    eventId: the matrix id of the event it was reacted to (inconsistency so the handling of events can be left to implementation for now)
+   *    emoji: the sent emoji
+   *    
+   *    
    */
   async handleThirdPartyRoomMessage(thirdPartyRoomMessageData) {
     let retry = 5;
@@ -974,6 +1074,8 @@ class Base {
       senderId,
       avatar,
       text,
+      quote,
+      reaction,
       html
     } = thirdPartyRoomMessageData;
 
@@ -985,7 +1087,44 @@ class Base {
     }
 
     let tag = autoTagger(senderId, this);
-
+    
+    if (quote != null) {
+      let quotedUser;
+      if (quote.userId == undefined) {
+        quotedUser = this.puppet.getClient().credentials.userId;
+      }
+      else {
+        const quotedUserIntent = await this.getIntentFromThirdPartySenderId(quote.userId);
+        quotedUser = quotedUserIntent.client.credentials.userId;
+      }
+      const quoteHtml = this.formatTextToQuote(matrixRoomId, quote.eventId, quotedUser, quote.text, text);
+      const quoteText = "> <" + quotedUser + "> " + quote.text + "\\n \\n" +text; 
+      return await client.sendMessage(matrixRoomId, {
+        body: tag(quoteText),
+        formatted_body: quoteHtml,
+        format: "org.matrix.custom.html",
+        msgtype: "m.text",
+        "m.relates_to": {
+          "m.in_reply_to": {
+            event_id: quote.eventId,
+          } 
+        },
+      });
+    }
+    if (reaction) {
+      try {
+        return await client.sendEvent(reaction.roomId, "m.reaction", {
+          "m.relates_to": {
+            event_id: reaction.eventId,
+            key: reaction.emoji,
+            rel_type: "m.annotation",
+          }
+        });
+      }
+      catch (err) {
+        //We catch all errors as reactions are not important        
+      }
+    }
     if (html) {
       return await client.sendMessage(matrixRoomId, {
         body: tag(text),
@@ -999,14 +1138,27 @@ class Base {
       msgtype: "m.text"
     });
   }
+  
+  //This is a dirty hack that is likely to fail, so should be replaced at one point
+  formatTextToQuote(quotedRoomId, quotedEventId, quotedUserId, quotedText, text) {
+    return "<mx-reply><blockquote><a href=\"https://matrix.to/#/" + quotedRoomId + "/" + quotedEventId + "\">In reply to</a> <a href=\"https://matrix.to/#/" + quotedUserId + "\">" + quotedUserId + "</a><br>" + quotedText + "</blockquote></mx-reply>" + text;
+  }
 
   handleMatrixEvent(req, _context) {
     const { info, warn } = debug(this.handleMatrixEvent.name);
     const data = req.getData();
-    if (data.type === 'm.room.message' || data.type == 'm.sticker' ) {
-      info('incoming message (or sticker). data:', data);
+    if (data.type === 'm.room.message' || data.type == 'm.sticker' || data.type == 'm.reaction') {
+      info('incoming message, sticker or annotation data:', data);
       return this.handleMatrixMessageEvent(data);
-    } else {
+    }  
+    else if (data.type == 'm.room.member') {
+      if (data.content.membership == 'leave') {
+        info('leaving room:', data.room_id);
+        const thirdPartyRoomId = this.getThirdPartyRoomIdFromMatrixRoomId(data.room_id);
+        return this.sendLeavingEventAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, data);
+      }
+    }
+    else {
       return warn('ignored a matrix event', data.type);
     }
   }
@@ -1073,6 +1225,35 @@ class Base {
         mimetype: data.content.info.mimetype,
         size: data.content.info.size,
         filename: data.content.filename || body || '',
+      }, data);
+    }
+    if (data.type === 'm.reaction') {
+      logger.info("reaction from riot");
+      
+      return await this.sendReactionAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, data);
+    }
+    if (msgtype === 'm.audio') {
+      logger.info("audio file from riot");
+      
+      let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
+      return await this.sendAudioAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
+        url, text: msg,
+        mimetype: data.content.info.mimetype,
+        size: data.content.info.size,
+        filename: body || '',
+      }, data);
+    }
+    if (msgtype === 'm.video') {
+      logger.info("video file from riot");
+      
+      let url = this.puppet.getClient().mxcUrlToHttp(data.content.url);
+      return await this.sendVideoAsPuppetToThirdPartyRoomWithId(thirdPartyRoomId, {
+        url, text: msg,
+        mimetype: data.content.info.mimetype,
+        size: data.content.info.size,
+        height: data.content.info.h,
+        width: data.content.info.w,
+        filename: body || '',
       }, data);
     }
     if (msgtype === 'm.file') {
@@ -1194,6 +1375,19 @@ class Base {
     } else {
       buffer = avatar.buffer;
       mimetype = avatar.type;
+    }
+
+    const roomState = await botIntent.roomState(room_id);
+    const avatarEvent = roomState.find( obj => obj.type == "m.room.avatar");
+    if (avatarEvent) {
+      const avatar_url = avatarEvent.content.url;
+      info('check if avatars differ');
+      let url = this.homeserver.href + "_matrix/media/v1/download/" + avatar_url.slice(6);
+      let prev_buffer = await download.getBuffer(url);
+      if (Buffer.compare(buffer, prev_buffer) == 0) { //replace avatar only if they differ
+        info('refusing to overwrite existing avatar');
+        return null;
+      }
     }
 
     let res = await upload(buffer, { type: mimetype });
