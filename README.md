@@ -1,5 +1,15 @@
 # matrix-puppet-bridge [![#matrix-puppet-bridge:matrix.org](https://img.shields.io/matrix/matrix-puppet-bridge:matrix.org.svg?label=%23matrix-puppet-bridge%3Amatrix.org&logo=matrix&server_fqdn=matrix.org)](https://matrix.to/#/#matrix-puppet-bridge:matrix.org)
 
+**Before you begin, consider the landscape**
+
+This project was the first in a series of innovative projects that seek to bridge additional, more challenging networks into matrix than was possible at the time. The original project is often not the best choice. This project remains here indefinitely because many of us rely on it and continue to maintain it here and there, but if you are new, please make yourself aware of the others and choose where to invest time learning. If you like Golang you may want to look at Tulir's concepts. If you like TypeScript, check out Soru's concepts. Here are some links to get you started:
+- https://github.com/Sorunome/mx-puppet-bridge
+- https://github.com/tulir/mautrix-imessage
+
+Please take the time to learn about these projects before continuing.
+
+**Now back to our regularly scheduled programming**
+
 This project provides a base class for a style of Matrix bridge which primarily acts as or "puppets" a specific user (usually yourself) on your homeserver and on a third party service.
 
 There is a common pattern in this style of bridge, such as duplicate message issues, which are dealt with by this module.
